@@ -130,6 +130,13 @@ if (-not (Test-Path $LangFile)) {
 }
 Write-Host "语言包: $LangFile ($((Get-Item $LangFile).Length) bytes)"
 
+$InnoLangDir = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\Languages"
+if (-not (Test-Path $InnoLangDir)) {
+    throw "Inno Setup Languages 目录不存在: $InnoLangDir"
+}
+Copy-Item $LangFile (Join-Path $InnoLangDir "ChineseSimplified.isl") -Force
+Write-Host "已复制语言包到: $InnoLangDir\ChineseSimplified.isl"
+
 $IsccCandidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"

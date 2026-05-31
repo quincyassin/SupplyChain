@@ -4,6 +4,8 @@ name: Build Windows Installer
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -51,6 +53,8 @@ jobs:
         shell: pwsh
         run: |
           $env:GITHUB_ACTIONS = "true"
+          Write-Host "当前 commit: $(git rev-parse HEAD)"
+          git log -1 --oneline
           $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
           $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
           $env:Path = "$machine;$user"
