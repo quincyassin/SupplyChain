@@ -129,13 +129,8 @@ if (-not (Test-Path $LangFile)) {
     throw "Inno Setup 语言包不存在: $LangFile"
 }
 Write-Host "语言包: $LangFile ($((Get-Item $LangFile).Length) bytes)"
-
-$InnoLangDir = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\Languages"
-if (-not (Test-Path $InnoLangDir)) {
-    throw "Inno Setup Languages 目录不存在: $InnoLangDir"
-}
-Copy-Item $LangFile (Join-Path $InnoLangDir "ChineseSimplified.isl") -Force
-Write-Host "已复制语言包到: $InnoLangDir\ChineseSimplified.isl"
+$LangFileAbs = (Resolve-Path $LangFile).Path
+Write-Host "语言包绝对路径: $LangFileAbs"
 
 $IsccCandidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
@@ -160,7 +155,7 @@ $IsccLog = Join-Path $InstallerOutDir "iscc.log"
 Write-Host "ISCC: $Iscc"
 Write-Host "ISS:  $IssFile"
 Write-Host "LOG:  $IsccLog"
-& $Iscc "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
+& $Iscc "/DLangFilePath=$LangFileAbs" "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
 $isccExit = $LASTEXITCODE
 if (Test-Path $IsccLog) {
     Write-Host "----- ISCC 日志 -----"

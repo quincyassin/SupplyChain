@@ -4,6 +4,10 @@
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
 
+#ifndef LangFilePath
+  #define LangFilePath "{src}\Languages\ChineseSimplified.isl"
+#endif
+
 [Setup]
 AppId={{A7B3C9D1-E2F4-4A6B-8C0D-1E2F3A4B5C6D}
 AppName=分单发单助手
@@ -26,7 +30,8 @@ VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "cn"; MessagesFile: "Languages\ChineseSimplified.isl"
+Name: "cn"; MessagesFile: "{#LangFilePath}"
+
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
 
