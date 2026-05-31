@@ -118,13 +118,17 @@ if ($SkipInstaller) {
 }
 
 Write-Step "5/5 编译 Inno Setup 安装包"
-$LangFile = Join-Path $RootDir "installer\languages\ChineseSimplified.isl"
+$LangFile = Join-Path $RootDir "installer\lang\ChineseSimplified.isl"
 if (-not (Test-Path $LangFile)) {
     Write-Host "下载 Inno Setup 简体中文语言包..."
     New-Item -ItemType Directory -Force -Path (Split-Path $LangFile) | Out-Null
     Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl" `
         -OutFile $LangFile -UseBasicParsing
 }
+if (-not (Test-Path $LangFile)) {
+    throw "Inno Setup 语言包不存在: $LangFile"
+}
+Write-Host "语言包: $LangFile ($((Get-Item $LangFile).Length) bytes)"
 
 $IsccCandidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",

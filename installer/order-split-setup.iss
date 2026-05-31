@@ -26,7 +26,7 @@ VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "{src}\lang\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
