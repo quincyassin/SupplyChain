@@ -58,11 +58,23 @@ jobs:
           $env:GITHUB_ACTIONS = "true"
           Write-Host "当前 commit: $(git rev-parse HEAD)"
           git log -1 --oneline
+          Write-Host "installer/Languages 目录:"
+          Get-ChildItem "${{ github.workspace }}/installer/Languages" | ForEach-Object { Write-Host "  $($_.Name) $($_.Length) bytes" }
           $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
           $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
           $env:Path = "$machine;$user"
           & "${{ github.workspace }}\scripts\build-windows-release.ps1"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 上传 ISCC 日志（失败时）
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: iscc-build-log
+          path: |
+            release/installer/iscc.log
+            release/installer/*
+          if-no-files-found: ignore
 
       - name: 上传安装包（Artifact）
         uses: actions/upload-artifact@v4

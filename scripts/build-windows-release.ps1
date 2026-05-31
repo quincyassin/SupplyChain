@@ -118,51 +118,92 @@ if ($SkipInstaller) {
 }
 
 Write-Step "5/5 编译 Inno Setup 安装包"
-$LangFile = Join-Path $RootDir "installer\Languages\ChineseSimplified.isl"
-if (-not (Test-Path $LangFile)) {
-    Write-Host "下载 Inno Setup 简体中文语言包..."
-    New-Item -ItemType Directory -Force -Path (Split-Path $LangFile) | Out-Null
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl" `
-        -OutFile $LangFile -UseBasicParsing
-}
-if (-not (Test-Path $LangFile)) {
-    throw "Inno Setup 语言包不存在: $LangFile"
-}
-Write-Host "语言包: $LangFile ($((Get-Item $LangFile).Length) bytes)"
-$LangFileAbs = (Resolve-Path $LangFile).Path
-Write-Host "语言包绝对路径: $LangFileAbs"
 
-$IsccCandidates = @(
-    "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
-)
-$Iscc = $IsccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
-if (-not $Iscc -and $env:GITHUB_ACTIONS -eq "true") {
-    throw "CI 环境中未找到 ISCC.exe，请检查 Inno Setup 安装步骤"
+function Install-InnoLanguageFile {
+    param(
+        [string]$SourceFile,
+        [string]$InnoRoot
+    )
+    $langDir = Join-Path $InnoRoot "Languages"
+    $targetFile = Join-Path $langDir "ChineseSimplified.isl"
+
+    if (-not (Test-Path $SourceFile)) {
+        throw "语言包源文件不存在: $SourceFile"
+    }
+    if (-not (Test-Path $langDir)) {
+        throw "Inno Setup Languages 目录不存在: $langDir"
+    }
+
+    Copy-Item $SourceFile $targetFile -Force
+    if (-not (Test-Path $targetFile)) {
+        throw "复制语言包失败: $targetFile"
+    }
+    $size = (Get-Item $targetFile).Length
+    if ($size -lt 1000) {
+        throw "语言包文件异常（过小）: $targetFile ($size bytes)"
+    }
+    Write-Host "语言包已安装: $targetFile ($size bytes)"
 }
-if (-not $Iscc) {
-    Write-Host "[提示] 未安装 Inno Setup 6，跳过 .exe 生成。" -ForegroundColor Yellow
-    Write-Host "  推荐：推代码到 GitHub，在 Actions 里自动构建，无需本地安装任何工具。"
-    Write-Host "  或下载 Inno Setup: https://jrsoftware.org/isdl.php"
-    Write-Host ""
-    Write-Host "staging 目录已就绪，可 zip 分发或手动编译 iss。"
-    exit 0
+
+$LangSource = Join-Path $RootDir "installer\Languages\ChineseSimplified.isl"
+if (-not (Test-Path $LangSource)) {
+    Write-Host "下载 Inno Setup 简体中文语言包..."
+    New-Item -ItemType Directory -Force -Path (Split-Path $LangSource) | Out-Null
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl" `
+        -OutFile $LangSource -UseBasicParsing
+}
+
+$InnoRoot = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6"
+if (-not (Test-Path $InnoRoot)) {
+    $InnoRoot = Join-Path $env:ProgramFiles "Inno Setup 6"
+}
+if (-not (Test-Path $InnoRoot)) {
+    if ($env:GITHUB_ACTIONS -ne "true") {
+        Write-Host "[提示] 未安装 Inno Setup 6，跳过 .exe 生成。" -ForegroundColor Yellow
+        Write-Host "  可使用 -SkipInstaller，或在 GitHub Actions 云端构建。"
+        exit 0
+    }
+    throw "未找到 Inno Setup 6 安装目录"
+}
+Install-InnoLanguageFile -SourceFile $LangSource -InnoRoot $InnoRoot
+
+$Iscc = Join-Path $InnoRoot "ISCC.exe"
+if (-not (Test-Path $Iscc)) {
+    throw "ISCC.exe 未找到: $Iscc"
+}
+
+$IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
+$IssContent = Get-Content $IssFile -Raw -Encoding UTF8
+if ($IssContent -match 'MessagesFile:\s*"\{[^}]+\}"') {
+    Write-Host "iss 使用变量引用语言包（需配合 /D 参数）"
+}
+if ($IssContent -match 'MessagesFile:\s*"Languages\\ChineseSimplified\.isl"') {
+    throw "iss 不能使用裸路径 Languages\ChineseSimplified.isl，请改用 compiler:Languages\ChineseSimplified.isl"
 }
 
 New-Item -ItemType Directory -Force -Path $InstallerOutDir | Out-Null
-$IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
 $IsccLog = Join-Path $InstallerOutDir "iscc.log"
-Write-Host "ISCC: $Iscc"
-Write-Host "ISS:  $IssFile"
-Write-Host "LOG:  $IsccLog"
-& $Iscc "/DLangFilePath=$LangFileAbs" "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
+Write-Host "ISCC:     $Iscc"
+Write-Host "ISS:      $IssFile"
+Write-Host "Staging:  $StagingDir"
+Write-Host "LOG:      $IsccLog"
+
+$IsccArgs = @(
+    "/O$InstallerOutDir",
+    "/Log=$IsccLog",
+    $IssFile
+)
+Write-Host "执行: $Iscc $($IsccArgs -join ' ')"
+& $Iscc @IsccArgs
 $isccExit = $LASTEXITCODE
 if (Test-Path $IsccLog) {
     Write-Host "----- ISCC 日志 -----"
-    Get-Content $IsccLog | ForEach-Object { Write-Host $_ }
+    Get-Content $IsccLog -Encoding UTF8 | ForEach-Object { Write-Host $_ }
     Write-Host "---------------------"
 }
-if ($isccExit -ne 0) { throw "Inno Setup 编译失败 (exit $isccExit)" }
+if ($isccExit -ne 0) {
+    throw "Inno Setup 编译失败 (exit $isccExit)，详见上方 ISCC 日志"
+}
 
 $SetupExe = Get-ChildItem -Path $InstallerOutDir -Filter "OrderSplitMerge_Setup_*.exe" | Select-Object -First 1
 Write-Host ""

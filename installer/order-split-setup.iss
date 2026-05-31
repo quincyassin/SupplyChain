@@ -1,12 +1,9 @@
 ﻿; 分单发单助手 Windows 安装包（Inno Setup 6）
-; 构建前请先运行 scripts\build-windows-release.ps1 生成 release\staging
+; 语言包：构建脚本会将 installer/Languages/ChineseSimplified.isl 复制到
+;         Inno Setup 安装目录 Languages 文件夹，再使用 compiler:Languages 引用
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
-
-#ifndef LangFilePath
-  #define LangFilePath "{src}\Languages\ChineseSimplified.isl"
-#endif
 
 [Setup]
 AppId={{A7B3C9D1-E2F4-4A6B-8C0D-1E2F3A4B5C6D}
@@ -30,7 +27,7 @@ VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "cn"; MessagesFile: "{#LangFilePath}"
+Name: "cn"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
@@ -50,12 +47,3 @@ Filename: "{app}\start.bat"; Description: "立即启动分单发单助手"; Flag
 
 [UninstallRun]
 Filename: "{app}\stop.bat"; Flags: runhidden waituntilterminated skipifdoesntexist
-
-[Code]
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-begin
-  if CurUninstallStep = usUninstall then
-  begin
-    { 卸载时确保后台 Java 进程已结束 }
-  end;
-end;
