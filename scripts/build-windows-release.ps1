@@ -94,11 +94,21 @@ Copy-Item $JarFile.FullName (Join-Path $StagingDir "app\order-split-merge.jar") 
 Copy-Item -Recurse $CachedJreSource (Join-Path $StagingDir "jre") -Force
 
 $PackagingDir = Join-Path $RootDir "packaging\windows"
-Copy-Item (Join-Path $PackagingDir "启动.bat") $StagingDir -Force
-Copy-Item (Join-Path $PackagingDir "停止.bat") $StagingDir -Force
-Copy-Item (Join-Path $PackagingDir "使用说明.txt") $StagingDir -Force
+Copy-Item (Join-Path $PackagingDir "start.bat") $StagingDir -Force
+Copy-Item (Join-Path $PackagingDir "stop.bat") $StagingDir -Force
+Copy-Item (Join-Path $PackagingDir "README.txt") $StagingDir -Force
 
-Write-Host "staging 已生成: $StagingDir"
+Write-Host "staging 内容:"
+Get-ChildItem -Path $StagingDir -Recurse | Select-Object -First 20 | ForEach-Object { Write-Host "  $($_.FullName)" }
+if (-not (Test-Path (Join-Path $StagingDir "app\order-split-merge.jar"))) {
+    throw "staging 缺少 app\order-split-merge.jar"
+}
+if (-not (Test-Path (Join-Path $StagingDir "jre\bin\javaw.exe"))) {
+    throw "staging 缺少 jre\bin\javaw.exe"
+}
+if (-not (Test-Path (Join-Path $StagingDir "start.bat"))) {
+    throw "staging 缺少 start.bat"
+}
 
 if ($SkipInstaller) {
     Write-Host ""
@@ -135,10 +145,18 @@ if (-not $Iscc) {
 
 New-Item -ItemType Directory -Force -Path $InstallerOutDir | Out-Null
 $IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
+$IsccLog = Join-Path $InstallerOutDir "iscc.log"
 Write-Host "ISCC: $Iscc"
 Write-Host "ISS:  $IssFile"
-& $Iscc $IssFile 2>&1 | ForEach-Object { Write-Host $_ }
-if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败 (exit $LASTEXITCODE)" }
+Write-Host "LOG:  $IsccLog"
+& $Iscc "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
+$isccExit = $LASTEXITCODE
+if (Test-Path $IsccLog) {
+    Write-Host "----- ISCC 日志 -----"
+    Get-Content $IsccLog | ForEach-Object { Write-Host $_ }
+    Write-Host "---------------------"
+}
+if ($isccExit -ne 0) { throw "Inno Setup 编译失败 (exit $isccExit)" }
 
 $SetupExe = Get-ChildItem -Path $InstallerOutDir -Filter "OrderSplitMerge_Setup_*.exe" | Select-Object -First 1
 Write-Host ""

@@ -25,7 +25,6 @@ if not exist "%JAR_FILE%" (
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
-rem 已在运行则直接打开浏览器
 powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8080' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
 if %ERRORLEVEL%==0 (
     start "" "http://localhost:8080"
