@@ -160,15 +160,15 @@ Write-Host "ISS:     $IssFile"
 Write-Host "Output:  $InstallerOutDir"
 Write-Host "LOG:     $IsccLog"
 
-# 仅使用 /O 指定输出目录，避免与 iss 内 OutputDir 冲突
+# ISCC 不支持 /Log= 参数，输出重定向到文件
 $IsccArgs = @(
     "/O$InstallerOutDir",
-    "/Log=$IsccLog",
     $IssFile
 )
 Write-Host "执行: $Iscc $($IsccArgs -join ' ')"
 
 $isccOutput = & $Iscc @IsccArgs 2>&1
+$isccOutput | Tee-Object -FilePath $IsccLog
 $isccOutput | ForEach-Object { Write-Host $_ }
 $isccExit = $LASTEXITCODE
 
