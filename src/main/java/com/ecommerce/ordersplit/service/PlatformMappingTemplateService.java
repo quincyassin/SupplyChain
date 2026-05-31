@@ -1,0 +1,416 @@
+package com.ecommerce.ordersplit.service;
+
+import com.ecommerce.ordersplit.dto.ColumnMappingItemDto;
+import com.ecommerce.ordersplit.dto.ExcelHeaderDto;
+import com.ecommerce.ordersplit.dto.PlatformExportTemplateDto;
+import com.ecommerce.ordersplit.dto.PlatformTemplateDetailDto;
+import com.ecommerce.ordersplit.dto.PlatformTemplateSummaryDto;
+import com.ecommerce.ordersplit.dto.SavePlatformTemplateRequest;
+import com.ecommerce.ordersplit.entity.PlatformMappingTemplate;
+import com.ecommerce.ordersplit.exception.BusinessException;
+import com.ecommerce.ordersplit.model.ColumnMappingConfig;
+import com.ecommerce.ordersplit.model.ColumnMappingItem;
+import com.ecommerce.ordersplit.repository.PlatformMappingTemplateRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 平台表头模板服务
+ *
+ * @author huangxinsong
+ */
+@Service
+@RequiredArgsConstructor
+public class PlatformMappingTemplateService {
+
+  /** 平台模板表头需全部出现在上传 Excel 中（100% 匹配） */
+  private static final double MIN_TEMPLATE_MATCH_RATIO = 1.0;
+
+  /** 最高分与次高分至少相差的列数，避免多个平台表头完全一致时误选 */
+  private static final int MIN_SCORE_GAP = 1;
+
+  private final PlatformMappingTemplateRepository templateRepository;
+  private final ColumnMappingService columnMappingService;
+  private final ObjectMapper objectMapper;
+
+  @Transactional(readOnly = true)
+  public List<PlatformTemplateSummaryDto> listSummaries() {
+    return templateRepository.findAllByOrderByPlatformAsc().stream()
+        .map(
+            entity ->
+                new PlatformTemplateSummaryDto(
+                    entity.getPlatform(),
+                    entity.getTemplateFileName(),
+                    entity.getUpdatedAt()))
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public PlatformTemplateDetailDto getDetail(String platform) {
+    return toDetail(getRequired(platform));
+  }
+
+  /**
+   * 加载平台导出模板（表头与列映射，用于回单导出）
+   */
+  @Transactional(readOnly = true)
+  public PlatformExportTemplateDto resolveExportTemplate(String platform) {
+    String normalized = normalizePlatform(platform);
+    PlatformMappingTemplate entity = getRequired(normalized);
+    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    if (templateHeaders.isEmpty()) {
+      throw new BusinessException("平台「" + normalized + "」尚未上传模板 Excel，请先在系统配置中配置表头映射");
+    }
+    List<ColumnMappingItemDto> mappingDtos = readMappingDtos(entity);
+    if (mappingDtos.isEmpty()) {
+      throw new BusinessException("平台「" + normalized + "」尚未配置列映射");
+    }
+    List<String> headerNames =
+        templateHeaders.stream().map(ExcelHeaderDto::getHeaderName).toList();
+    List<ColumnMappingItemDto> mergedMapping =
+        columnMappingService.mergePlatformMapping(mappingDtos, templateHeaders);
+    ColumnMappingConfig mapping = columnMappingService.fromDtos(mergedMapping, false);
+    return new PlatformExportTemplateDto(normalized, mapping, templateHeaders);
+  }
+
+  @Transactional(readOnly = true)
+  public boolean exists(String platform) {
+    return templateRepository.existsByPlatform(normalizePlatform(platform));
+  }
+
+  @Transactional(readOnly = true)
+  public TemplateHeaderMatch matchByHeaders(List<ExcelHeaderDto> uploadHeaders) {
+    List<PlatformMappingTemplate> templates = templateRepository.findAllByOrderByPlatformAsc();
+    if (templates.isEmpty()) {
+      throw new BusinessException("尚未配置任何平台模板，请先到「系统配置 → 表头映射」中添加");
+    }
+
+    List<String> normalizedUpload = normalizeHeaderNames(extractHeaderNames(uploadHeaders));
+    if (normalizedUpload.isEmpty()) {
+      throw new BusinessException("Excel 表头为空，无法匹配平台模板");
+    }
+
+    List<TemplateHeaderMatch> qualified = new ArrayList<>();
+    for (PlatformMappingTemplate entity : templates) {
+      List<String> templateHeaderNames =
+          readTemplateHeaders(entity).stream()
+              .map(ExcelHeaderDto::getHeaderName)
+              .filter(name -> name != null && !name.isBlank())
+              .toList();
+      if (templateHeaderNames.isEmpty()) {
+        continue;
+      }
+      int score = scoreHeaderMatch(normalizedUpload, templateHeaderNames);
+      double ratio = (double) score / templateHeaderNames.size();
+      if (ratio < MIN_TEMPLATE_MATCH_RATIO) {
+        continue;
+      }
+      ColumnMappingConfig mapping =
+          resolveMappingForHeaders(entity.getPlatform(), uploadHeaders);
+      qualified.add(new TemplateHeaderMatch(entity.getPlatform(), mapping, score));
+    }
+
+    if (qualified.isEmpty()) {
+      throw new BusinessException(
+          "未找到与当前 Excel 表头完全一致的平台模板（需与某平台模板表头 100% 对应）。"
+              + "若为新平台订单，请先在「系统配置 → 表头映射」中创建该平台并上传对应模板表头");
+    }
+
+    qualified.sort((left, right) -> Integer.compare(right.matchScore(), left.matchScore()));
+    TemplateHeaderMatch best = qualified.get(0);
+    if (qualified.size() >= 2) {
+      int secondScore = qualified.get(1).matchScore();
+      if (best.matchScore() - secondScore < MIN_SCORE_GAP) {
+        String candidates =
+            qualified.stream()
+                .limit(3)
+                .map(TemplateHeaderMatch::platform)
+                .collect(Collectors.joining("、"));
+        throw new BusinessException(
+            "表头同时接近多个平台模板（"
+                + candidates
+                + "），无法自动识别。请核对是否为该平台订单，或先在系统配置中创建/调整对应平台模板");
+      }
+    }
+    return best;
+  }
+
+  @Transactional(readOnly = true)
+  public ColumnMappingConfig resolveMappingForHeaders(
+      String platform, List<ExcelHeaderDto> uploadHeaders) {
+    String normalized = normalizePlatform(platform);
+    PlatformMappingTemplate entity =
+        templateRepository
+            .findByPlatform(normalized)
+            .orElseThrow(
+                () ->
+                    new BusinessException(
+                        "平台「" + normalized + "」尚未配置表头模板，请先在系统配置中添加"));
+
+    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    List<ColumnMappingItemDto> savedMapping = readMappingDtos(entity);
+
+    List<ColumnMappingItemDto> rematched =
+        rematchMapping(savedMapping, templateHeaders, uploadHeaders);
+    List<ColumnMappingItemDto> merged =
+        columnMappingService.mergePlatformMapping(
+            filterPlatformMappingDtos(rematched), uploadHeaders);
+    return columnMappingService.fromDtos(filterPlatformMappingDtos(merged), false);
+  }
+
+  /**
+   * 新增平台（仅名称入库，模板内容后续上传保存）
+   */
+  @Transactional
+  public PlatformTemplateDetailDto create(String platform) {
+    String normalized = normalizePlatform(platform);
+    if (templateRepository.existsByPlatform(normalized)) {
+      throw new BusinessException("平台「" + normalized + "」已存在");
+    }
+    PlatformMappingTemplate entity = new PlatformMappingTemplate();
+    entity.setPlatform(normalized);
+    entity.setMappingJson("[]");
+    entity.setTemplateHeadersJson("[]");
+    templateRepository.save(entity);
+    return toDetail(entity);
+  }
+
+  @Transactional
+  public PlatformTemplateDetailDto save(String platform, SavePlatformTemplateRequest request) {
+    String normalized = normalizePlatform(platform);
+    if (request == null || request.getMapping() == null || request.getMapping().isEmpty()) {
+      throw new BusinessException("请配置列映射后再保存");
+    }
+    if (request.getTemplateHeaders() == null || request.getTemplateHeaders().isEmpty()) {
+      throw new BusinessException("请先上传模板 Excel");
+    }
+
+    List<ColumnMappingItemDto> mappingToSave =
+        columnMappingService.mergePlatformMapping(
+            filterPlatformMappingDtos(request.getMapping()), request.getTemplateHeaders());
+    columnMappingService.fromDtos(mappingToSave, false);
+
+    PlatformMappingTemplate entity =
+        templateRepository.findByPlatform(normalized).orElseGet(PlatformMappingTemplate::new);
+    entity.setPlatform(normalized);
+    entity.setMappingJson(writeJson(mappingToSave));
+    entity.setTemplateHeadersJson(writeJson(request.getTemplateHeaders()));
+    entity.setTemplateFileName(request.getTemplateFileName());
+    templateRepository.save(entity);
+    return toDetail(entity);
+  }
+
+  @Transactional
+  public void delete(String platform) {
+    templateRepository.delete(getRequired(platform));
+  }
+
+  private PlatformMappingTemplate getRequired(String platform) {
+    return templateRepository
+        .findByPlatform(normalizePlatform(platform))
+        .orElseThrow(() -> new BusinessException("平台模板不存在: " + platform));
+  }
+
+  private PlatformTemplateDetailDto toDetail(PlatformMappingTemplate entity) {
+    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    List<ColumnMappingItemDto> mergedMapping =
+        columnMappingService.mergePlatformMapping(readMappingDtos(entity), templateHeaders);
+    return new PlatformTemplateDetailDto(
+        entity.getPlatform(),
+        entity.getTemplateFileName(),
+        mergedMapping,
+        templateHeaders,
+        entity.getUpdatedAt());
+  }
+
+  private List<ColumnMappingItemDto> readMappingDtos(PlatformMappingTemplate entity) {
+    try {
+      List<ColumnMappingItemDto> dtos =
+          objectMapper.readValue(
+              entity.getMappingJson(), new TypeReference<List<ColumnMappingItemDto>>() {});
+      return filterPlatformMappingDtos(dtos);
+    } catch (Exception ex) {
+      throw new BusinessException("平台模板映射数据损坏");
+    }
+  }
+
+  private List<ColumnMappingItemDto> filterPlatformMappingDtos(List<ColumnMappingItemDto> dtos) {
+    if (dtos == null) {
+      return List.of();
+    }
+    return dtos.stream()
+        .filter(dto -> dto.getFieldKey() != null && !"merchant".equals(dto.getFieldKey()))
+        .toList();
+  }
+
+  private List<ExcelHeaderDto> readTemplateHeaders(PlatformMappingTemplate entity) {
+    if (entity.getTemplateHeadersJson() == null || entity.getTemplateHeadersJson().isBlank()) {
+      return List.of();
+    }
+    try {
+      return objectMapper.readValue(
+          entity.getTemplateHeadersJson(), new TypeReference<List<ExcelHeaderDto>>() {});
+    } catch (Exception ex) {
+      throw new BusinessException("平台模板表头数据损坏");
+    }
+  }
+
+  private List<ColumnMappingItemDto> rematchMapping(
+      List<ColumnMappingItemDto> saved,
+      List<ExcelHeaderDto> templateHeaders,
+      List<ExcelHeaderDto> uploadHeaders) {
+    ColumnMappingConfig suggested =
+        columnMappingService.suggestMappingFromHeaders(uploadHeaders);
+    if (uploadHeaders.isEmpty()) {
+      return saved;
+    }
+
+    Map<String, Integer> uploadIndexByNormalizedName = buildUploadHeaderIndexMap(uploadHeaders);
+
+    List<ColumnMappingItemDto> result = new ArrayList<>();
+    int order = 0;
+    for (ColumnMappingItemDto item : saved) {
+      ColumnMappingItemDto copy = new ColumnMappingItemDto();
+      copy.setFieldKey(item.getFieldKey());
+      copy.setEnabled(item.getEnabled());
+      copy.setSortOrder(order++);
+
+      String templateName = resolveHeaderNameByColumnIndex(templateHeaders, item.getSourceIndex());
+      Integer newIndex = resolveUploadColumnIndex(templateName, uploadHeaders, uploadIndexByNormalizedName);
+      if (newIndex == null) {
+        ColumnMappingItem suggestedItem =
+            suggested.getItems().stream()
+                .filter(s -> s.getFieldKey().getCode().equals(item.getFieldKey()))
+                .findFirst()
+                .orElse(null);
+        newIndex = suggestedItem == null ? -1 : suggestedItem.getSourceIndex();
+      }
+      copy.setSourceIndex(newIndex);
+      if (newIndex == null || newIndex < 0) {
+        copy.setEnabled(false);
+      } else if (item.getEnabled() == null || item.getEnabled()) {
+        copy.setEnabled(true);
+      }
+      result.add(copy);
+    }
+    return result;
+  }
+
+  private Map<String, Integer> buildUploadHeaderIndexMap(List<ExcelHeaderDto> uploadHeaders) {
+    Map<String, Integer> uploadIndexByNormalizedName = new LinkedHashMap<>();
+    for (ExcelHeaderDto header : uploadHeaders) {
+      String normalized = normalizeHeaderName(header.getHeaderName());
+      if (!normalized.isEmpty()) {
+        uploadIndexByNormalizedName.putIfAbsent(normalized, header.getColumnIndex());
+      }
+    }
+    return uploadIndexByNormalizedName;
+  }
+
+  private Integer resolveUploadColumnIndex(
+      String templateHeaderName,
+      List<ExcelHeaderDto> uploadHeaders,
+      Map<String, Integer> uploadIndexByNormalizedName) {
+    if (templateHeaderName == null || templateHeaderName.isBlank()) {
+      return null;
+    }
+    String normalizedTemplateName = normalizeHeaderName(templateHeaderName);
+    Integer exact = uploadIndexByNormalizedName.get(normalizedTemplateName);
+    if (exact != null) {
+      return exact;
+    }
+    for (ExcelHeaderDto header : uploadHeaders) {
+      String normalizedUploadName = normalizeHeaderName(header.getHeaderName());
+      if (headersSimilar(normalizedUploadName, normalizedTemplateName)) {
+        return header.getColumnIndex();
+      }
+    }
+    return null;
+  }
+
+  private String resolveHeaderNameByColumnIndex(
+      List<ExcelHeaderDto> headers, Integer sourceIndex) {
+    if (sourceIndex == null || sourceIndex < 0) {
+      return null;
+    }
+    return headers.stream()
+        .filter(header -> header.getColumnIndex() == sourceIndex)
+        .map(ExcelHeaderDto::getHeaderName)
+        .findFirst()
+        .orElse(null);
+  }
+
+  private List<String> extractHeaderNames(List<ExcelHeaderDto> headers) {
+    return headers.stream().map(ExcelHeaderDto::getHeaderName).toList();
+  }
+
+  private String normalizePlatform(String platform) {
+    if (platform == null || platform.isBlank()) {
+      throw new BusinessException("平台名称不能为空");
+    }
+    return platform.trim();
+  }
+
+  private String writeJson(Object value) {
+    try {
+      return objectMapper.writeValueAsString(value);
+    } catch (Exception ex) {
+      throw new BusinessException("保存模板失败");
+    }
+  }
+
+  private int scoreHeaderMatch(List<String> uploadHeaders, List<String> templateHeaders) {
+    Set<String> uploadSet = new HashSet<>(uploadHeaders);
+    int score = 0;
+    for (String templateName : templateHeaders) {
+      String normalizedTemplate = normalizeHeaderName(templateName);
+      if (uploadSet.contains(normalizedTemplate)) {
+        score++;
+        continue;
+      }
+      for (String uploadName : uploadHeaders) {
+        if (headersSimilar(uploadName, normalizedTemplate)) {
+          score++;
+          break;
+        }
+      }
+    }
+    return score;
+  }
+
+  private List<String> normalizeHeaderNames(List<String> headerNames) {
+    List<String> result = new ArrayList<>();
+    for (String name : headerNames) {
+      String normalized = normalizeHeaderName(name);
+      if (!normalized.isEmpty()) {
+        result.add(normalized);
+      }
+    }
+    return result;
+  }
+
+  private String normalizeHeaderName(String name) {
+    if (name == null) {
+      return "";
+    }
+    return name.trim().toLowerCase(Locale.ROOT);
+  }
+
+  private boolean headersSimilar(String left, String right) {
+    if (left.isEmpty() || right.isEmpty()) {
+      return false;
+    }
+    return left.equals(right) || left.contains(right) || right.contains(left);
+  }
+}
