@@ -118,7 +118,7 @@ if ($SkipInstaller) {
 }
 
 Write-Step "5/5 编译 Inno Setup 安装包"
-$LangFile = Join-Path $RootDir "installer\lang\ChineseSimplified.isl"
+$LangFile = Join-Path $RootDir "installer\Languages\ChineseSimplified.isl"
 if (-not (Test-Path $LangFile)) {
     Write-Host "下载 Inno Setup 简体中文语言包..."
     New-Item -ItemType Directory -Force -Path (Split-Path $LangFile) | Out-Null
