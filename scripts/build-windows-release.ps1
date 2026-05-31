@@ -21,6 +21,14 @@ function Write-Step([string]$Message) {
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
 
+function Invoke-Checked([string]$Label, [scriptblock]$Block) {
+    Write-Host "--- $Label"
+    & $Block
+    if ($LASTEXITCODE -ne 0) {
+        throw "$Label 失败 (exit $LASTEXITCODE)"
+    }
+}
+
 Set-Location $RootDir
 
 Write-Host "=========================================="
@@ -31,15 +39,15 @@ Write-Host "=========================================="
 Write-Step "1/5 构建前端"
 Set-Location (Join-Path $RootDir "frontend")
 if (-not (Test-Path "node_modules")) {
-    npm ci
+    Invoke-Checked "npm ci" { npm ci }
+} else {
+    Write-Host "node_modules 已存在，跳过 npm ci"
 }
-npm run build
-if ($LASTEXITCODE -ne 0) { throw "前端构建失败" }
+Invoke-Checked "npm run build" { npm run build }
 
 Write-Step "2/5 打包后端（standalone profile，含前端 static）"
 Set-Location $RootDir
-mvn -B -Pstandalone -DskipTests package
-if ($LASTEXITCODE -ne 0) { throw "Maven 打包失败" }
+Invoke-Checked "mvn package" { mvn -B -Pstandalone -DskipTests package }
 
 $JarFile = Get-ChildItem -Path (Join-Path $RootDir "target") -Filter "order-split-merge-*.jar" |
     Where-Object { $_.Name -notmatch "original" } |
@@ -54,6 +62,10 @@ if (-not $SkipJreDownload) {
         Write-Host "下载 Eclipse Temurin JRE 17（约 40MB）..."
         $JreUrl = "https://api.adoptium.net/v3/binary/latest/17/ga/windows/x64/jre/hotspot/normal/eclipse?project=jdk"
         Invoke-WebRequest -Uri $JreUrl -OutFile $JreZip -UseBasicParsing
+    }
+    if ((Get-Item $JreZip).Length -lt 30MB) {
+        Remove-Item $JreZip -Force
+        throw "JRE 下载文件过小，可能下载失败"
     }
     $JreExtractDir = Join-Path $JreCacheDir "extracted"
     if (-not (Test-Path (Join-Path $JreExtractDir ".ready"))) {
@@ -96,6 +108,14 @@ if ($SkipInstaller) {
 }
 
 Write-Step "5/5 编译 Inno Setup 安装包"
+$LangFile = Join-Path $RootDir "installer\languages\ChineseSimplified.isl"
+if (-not (Test-Path $LangFile)) {
+    Write-Host "下载 Inno Setup 简体中文语言包..."
+    New-Item -ItemType Directory -Force -Path (Split-Path $LangFile) | Out-Null
+    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl" `
+        -OutFile $LangFile -UseBasicParsing
+}
+
 $IsccCandidates = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
     "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
@@ -114,8 +134,11 @@ if (-not $Iscc) {
 }
 
 New-Item -ItemType Directory -Force -Path $InstallerOutDir | Out-Null
-& $Iscc (Join-Path $RootDir "installer\order-split-setup.iss")
-if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败" }
+$IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
+Write-Host "ISCC: $Iscc"
+Write-Host "ISS:  $IssFile"
+& $Iscc $IssFile 2>&1 | ForEach-Object { Write-Host $_ }
+if ($LASTEXITCODE -ne 0) { throw "Inno Setup 编译失败 (exit $LASTEXITCODE)" }
 
 $SetupExe = Get-ChildItem -Path $InstallerOutDir -Filter "OrderSplitMerge_Setup_*.exe" | Select-Object -First 1
 Write-Host ""

@@ -14,20 +14,18 @@ DefaultGroupName=分单发单助手
 DisableProgramGroupPage=yes
 OutputDir=..\release\installer
 OutputBaseFilename=OrderSplitMerge_Setup_{#AppVersion}
-SetupIconFile=
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\app\order-split-merge.jar
 VersionInfoVersion={#AppVersion}
 VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "chinesesimplified"; MessagesFile: "languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
