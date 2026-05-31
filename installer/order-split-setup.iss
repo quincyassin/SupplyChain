@@ -1,6 +1,5 @@
 ﻿; 分单发单助手 Windows 安装包（Inno Setup 6）
-; 语言包：构建脚本会将 installer/Languages/ChineseSimplified.isl 复制到
-;         Inno Setup 安装目录 Languages 文件夹，再使用 compiler:Languages 引用
+; 语言包使用仓库内 installer/Languages/ChineseSimplified.isl（{src} 指向本 iss 所在目录）
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
@@ -27,7 +26,7 @@ VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "cn"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
+Name: "cn"; MessagesFile: "{src}\Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
