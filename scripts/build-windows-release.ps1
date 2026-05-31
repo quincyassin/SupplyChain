@@ -120,6 +120,17 @@ if ($SkipInstaller) {
 Write-Step "5/5 编译 Inno Setup 安装包"
 
 $IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
+$StagingForIss = Join-Path $RootDir "release\staging"
+
+if (-not (Test-Path $StagingForIss)) {
+    throw "staging 目录不存在: $StagingForIss"
+}
+$stagingFiles = Get-ChildItem -Path $StagingForIss -Recurse -File
+Write-Host "staging 路径: $StagingForIss"
+Write-Host "staging 文件数: $($stagingFiles.Count)"
+if ($stagingFiles.Count -lt 5) {
+    throw "staging 文件过少，可能未正确组装"
+}
 
 $InnoRoot = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6"
 if (-not (Test-Path $InnoRoot)) {
@@ -143,27 +154,37 @@ if (-not (Test-Path $IssFile)) {
 
 New-Item -ItemType Directory -Force -Path $InstallerOutDir | Out-Null
 $IsccLog = Join-Path $InstallerOutDir "iscc.log"
-Write-Host "ISCC: $Iscc"
-Write-Host "ISS:  $IssFile"
-Write-Host "LOG:  $IsccLog"
 
+Write-Host "ISCC:    $Iscc"
+Write-Host "ISS:     $IssFile"
+Write-Host "Output:  $InstallerOutDir"
+Write-Host "LOG:     $IsccLog"
+
+# 仅使用 /O 指定输出目录，避免与 iss 内 OutputDir 冲突
 $IsccArgs = @(
     "/O$InstallerOutDir",
     "/Log=$IsccLog",
     $IssFile
 )
-& $Iscc @IsccArgs
+Write-Host "执行: $Iscc $($IsccArgs -join ' ')"
+
+$isccOutput = & $Iscc @IsccArgs 2>&1
+$isccOutput | ForEach-Object { Write-Host $_ }
 $isccExit = $LASTEXITCODE
+
 if (Test-Path $IsccLog) {
     Write-Host "----- ISCC 日志 -----"
     Get-Content $IsccLog -Encoding UTF8 | ForEach-Object { Write-Host $_ }
     Write-Host "---------------------"
 }
 if ($isccExit -ne 0) {
-    throw "Inno Setup 编译失败 (exit $isccExit)，详见上方 ISCC 日志"
+    throw "Inno Setup 编译失败 (exit $isccExit)，详见上方输出与 ISCC 日志"
 }
 
 $SetupExe = Get-ChildItem -Path $InstallerOutDir -Filter "OrderSplitMerge_Setup_*.exe" | Select-Object -First 1
+if (-not $SetupExe) {
+    throw "未找到生成的安装包: $InstallerOutDir\OrderSplitMerge_Setup_*.exe"
+}
 Write-Host ""
 Write-Host "=========================================="
 Write-Host "  构建完成"

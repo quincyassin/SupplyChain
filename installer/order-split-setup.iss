@@ -1,29 +1,27 @@
-﻿; 分单发单助手 Windows 安装包（Inno Setup 6）
-; 安装向导使用 Inno Setup 内置英文（Default.isl）
+﻿; Order Split Merge Windows Installer (Inno Setup 6)
+; Wizard language: English (Default.isl). Save as UTF-8 with BOM if adding Unicode text.
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
 
 [Setup]
 AppId={{A7B3C9D1-E2F4-4A6B-8C0D-1E2F3A4B5C6D}
-AppName=分单发单助手
+AppName=OrderSplitMerge
 AppVersion={#AppVersion}
-AppVerName=分单发单助手 {#AppVersion}
-AppPublisher=分单发单助手
+AppVerName=OrderSplitMerge {#AppVersion}
+AppPublisher=OrderSplitMerge
 DefaultDirName={autopf}\OrderSplitMerge
-DefaultGroupName=分单发单助手
+DefaultGroupName=OrderSplitMerge
 DisableProgramGroupPage=yes
-OutputDir=..\release\installer
 OutputBaseFilename=OrderSplitMerge_Setup_{#AppVersion}
-Compression=lzma2
+Compression=lzma
 SolidCompression=yes
-WizardStyle=modern
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 VersionInfoVersion={#AppVersionInfo}
-VersionInfoProductName=分单发单助手
-VersionInfoCompany=分单发单助手
+VersionInfoProductName=OrderSplitMerge
+VersionInfoCompany=OrderSplitMerge
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -35,14 +33,14 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 Source: "..\release\staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Comment: "Launch app"
-Name: "{group}\Stop"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"; Comment: "Stop service"
+Name: "{group}\OrderSplitMerge"; Filename: "{app}\start.bat"; WorkingDir: "{app}"
+Name: "{group}\Stop"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"
 Name: "{group}\README"; Filename: "{app}\README.txt"
 Name: "{group}\Uninstall"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Launch app"
+Name: "{autodesktop}\OrderSplitMerge"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\start.bat"; Description: "Launch 分单发单助手"; Flags: nowait postinstall skipifsilent shellexec
+Filename: "{app}\start.bat"; Description: "Launch OrderSplitMerge"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 Filename: "{app}\stop.bat"; Flags: runhidden waituntilterminated skipifdoesntexist
