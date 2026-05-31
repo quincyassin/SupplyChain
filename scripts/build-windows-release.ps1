@@ -155,7 +155,7 @@ $IsccLog = Join-Path $InstallerOutDir "iscc.log"
 Write-Host "ISCC: $Iscc"
 Write-Host "ISS:  $IssFile"
 Write-Host "LOG:  $IsccLog"
-& $Iscc "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
+& $Iscc "/DLangFilePath=$LangFileAbs" "/O$InstallerOutDir" "/Log=$IsccLog" $IssFile
 $isccExit = $LASTEXITCODE
 if (Test-Path $IsccLog) {
     Write-Host "----- ISCC 日志 -----"
