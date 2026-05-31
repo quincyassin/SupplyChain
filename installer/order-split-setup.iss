@@ -1,5 +1,5 @@
 ﻿; 分单发单助手 Windows 安装包（Inno Setup 6）
-; 语言包使用仓库内 installer/Languages/ChineseSimplified.isl（{src} 指向本 iss 所在目录）
+; 安装向导使用 Inno Setup 内置英文（Default.isl）
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
@@ -26,23 +26,23 @@ VersionInfoProductName=分单发单助手
 VersionInfoCompany=分单发单助手
 
 [Languages]
-Name: "cn"; MessagesFile: "{src}\Languages\ChineseSimplified.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "创建桌面快捷方式"; GroupDescription: "附加图标:"; Flags: checkedonce
+Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional icons:"; Flags: checkedonce
 
 [Files]
 Source: "..\release\staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{group}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Comment: "启动分单发单助手"
-Name: "{group}\停止分单发单助手"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"; Comment: "停止后台服务"
-Name: "{group}\使用说明"; Filename: "{app}\README.txt"
-Name: "{group}\卸载分单发单助手"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "启动分单发单助手"
+Name: "{group}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Comment: "Launch app"
+Name: "{group}\Stop"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"; Comment: "Stop service"
+Name: "{group}\README"; Filename: "{app}\README.txt"
+Name: "{group}\Uninstall"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\分单发单助手"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Tasks: desktopicon; Comment: "Launch app"
 
 [Run]
-Filename: "{app}\start.bat"; Description: "立即启动分单发单助手"; Flags: nowait postinstall skipifsilent shellexec
+Filename: "{app}\start.bat"; Description: "Launch 分单发单助手"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 Filename: "{app}\stop.bat"; Flags: runhidden waituntilterminated skipifdoesntexist

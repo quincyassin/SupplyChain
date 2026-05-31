@@ -119,24 +119,7 @@ if ($SkipInstaller) {
 
 Write-Step "5/5 编译 Inno Setup 安装包"
 
-$InstallerDir = Join-Path $RootDir "installer"
-$LangSource = Join-Path $InstallerDir "Languages\ChineseSimplified.isl"
-$IssFile = Join-Path $InstallerDir "order-split-setup.iss"
-
-if (-not (Test-Path $LangSource)) {
-    Write-Host "下载 Inno Setup 简体中文语言包..."
-    New-Item -ItemType Directory -Force -Path (Split-Path $LangSource) | Out-Null
-    Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jrsoftware/issrc/master/Files/Languages/Unofficial/ChineseSimplified.isl" `
-        -OutFile $LangSource -UseBasicParsing
-}
-if (-not (Test-Path $LangSource)) {
-    throw "语言包不存在: $LangSource"
-}
-$langSize = (Get-Item $LangSource).Length
-Write-Host "仓库语言包: $LangSource ($langSize bytes)"
-if ($langSize -lt 1000) {
-    throw "语言包文件异常（过小）"
-}
+$IssFile = Join-Path $RootDir "installer\order-split-setup.iss"
 
 $InnoRoot = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6"
 if (-not (Test-Path $InnoRoot)) {
@@ -158,24 +141,17 @@ if (-not (Test-Path $IssFile)) {
     throw "iss 文件不存在: $IssFile"
 }
 
-$issLangLine = (Get-Content $IssFile -Encoding UTF8 | Where-Object { $_ -match 'MessagesFile' } | Select-Object -First 1)
-Write-Host "iss Languages 行: $issLangLine"
-if ($issLangLine -match 'compiler:Languages') {
-    throw "iss 仍引用 compiler:Languages，请改用 {src}\Languages\ChineseSimplified.isl"
-}
-
 New-Item -ItemType Directory -Force -Path $InstallerOutDir | Out-Null
 $IsccLog = Join-Path $InstallerOutDir "iscc.log"
-Write-Host "ISCC:    $Iscc"
-Write-Host "ISS:     $IssFile"
-Write-Host "LOG:     $IsccLog"
+Write-Host "ISCC: $Iscc"
+Write-Host "ISS:  $IssFile"
+Write-Host "LOG:  $IsccLog"
 
 $IsccArgs = @(
     "/O$InstallerOutDir",
     "/Log=$IsccLog",
     $IssFile
 )
-Write-Host "执行: $Iscc $($IsccArgs -join ' ')"
 & $Iscc @IsccArgs
 $isccExit = $LASTEXITCODE
 if (Test-Path $IsccLog) {
