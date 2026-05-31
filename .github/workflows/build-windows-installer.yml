@@ -36,18 +36,21 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: 安装 Inno Setup 6
+      - name: 安装 Inno Setup 6（强制重装）
         shell: pwsh
         run: |
-          choco install innosetup -y --no-progress
+          choco install innosetup -y --force --no-progress
           $machine = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
           $user = [System.Environment]::GetEnvironmentVariable("Path", "User")
           $env:Path = "$machine;$user"
           $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          $langDir = "${env:ProgramFiles(x86)}\Inno Setup 6\Languages"
           if (-not (Test-Path $iscc)) {
             throw "ISCC.exe 未找到: $iscc"
           }
           Write-Host "Inno Setup 已安装: $iscc"
+          Write-Host "Languages 目录: $langDir"
+          Get-ChildItem $langDir -Filter "*.isl" | ForEach-Object { Write-Host "  - $($_.Name)" }
 
       - name: 构建安装包
         shell: pwsh
