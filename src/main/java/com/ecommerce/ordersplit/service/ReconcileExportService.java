@@ -61,7 +61,7 @@ public class ReconcileExportService {
         }
         PlatformExportTemplateDto exportTemplate =
                 platformMappingTemplateService.resolveExportTemplate(normalizedPlatform);
-        return excelWriterService.writeMerchantReceiptTable(
+        return excelWriterService.writePlatformReconcileTable(
                 normalizedPlatform,
                 normalizedPlatform + "对账",
                 rows,

@@ -88,7 +88,7 @@ public class ExcelWriterService {
             "分单日期"
     };
 
-    /** 商家对账：不含平台/商家/供货价，含成本价 */
+    /** 商家对账：不含平台/商家/供货价，含成本价、总计 */
     private static final String[] MERCHANT_RECONCILE_HEADERS = {
             "回单状态",
             "系统编号",
@@ -103,9 +103,13 @@ public class ExcelWriterService {
             "收货人地址",
             "运费",
             "成本价",
+            "总计",
             "备注",
             "分单日期"
     };
+
+    private static final String RECONCILE_TOTAL_HEADER = "总计";
+    private static final String PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER = "供货价";
 
     /**
      * 写出当日发单表格
@@ -170,8 +174,40 @@ public class ExcelWriterService {
     }
 
     /**
-     * 按平台上传模板写出回单表格到内存（用于浏览器 ZIP / 本地写盘）
+     * 平台对账导出（按平台模板列 + 末尾追加供货价、总计）
      */
+    public byte[] writePlatformReconcileTable(
+            String platformKey,
+            String sheetTitle,
+            List<DailyTableRowDto> rows,
+            ColumnMappingConfig mapping,
+            List<ExcelHeaderDto> templateHeaders)
+            throws IOException {
+        ReceiptWritePlan writePlan = resolveReceiptWritePlan(platformKey, mapping, templateHeaders);
+        int supplyPriceColumnIndex = resolveMaxColumnIndex(writePlan.sortedHeaders()) + 1;
+        int totalColumnIndex = supplyPriceColumnIndex + 1;
+        try (SXSSFWorkbook workbook = createStreamingWorkbook();
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            writePlatformReconcileSheet(
+                    workbook.createSheet(sanitizeSheetName(sheetTitle)),
+                    rows,
+                    writePlan,
+                    supplyPriceColumnIndex,
+                    totalColumnIndex);
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
+    public byte[] writePlatformReconcileTable(
+            String sheetTitle,
+            List<DailyTableRowDto> rows,
+            ColumnMappingConfig mapping,
+            List<ExcelHeaderDto> templateHeaders)
+            throws IOException {
+        return writePlatformReconcileTable("default", sheetTitle, rows, mapping, templateHeaders);
+    }
+
     public byte[] writeMerchantReceiptTable(
             String platformKey,
             String sheetTitle,
@@ -324,8 +360,67 @@ public class ExcelWriterService {
                 .setCellValue(
                         row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
         dataRow.createCell(col++).setCellValue(formatPriceCell(row.getCostPrice()));
+        dataRow.createCell(col++)
+                .setCellValue(
+                        formatPriceCell(
+                                calculateReconcileTotal(
+                                        row.getCostPrice(), row.getQuantity(), row.getShippingFee())));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
         dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
+    }
+
+    private void writePlatformReconcileSheet(
+            Sheet sheet,
+            List<DailyTableRowDto> rows,
+            ReceiptWritePlan writePlan,
+            int supplyPriceColumnIndex,
+            int totalColumnIndex) {
+        Row headerRow = sheet.createRow(0);
+        for (ExcelHeaderDto header : writePlan.sortedHeaders()) {
+            headerRow.createCell(header.getColumnIndex()).setCellValue(nullToEmpty(header.getHeaderName()));
+        }
+        headerRow.createCell(supplyPriceColumnIndex)
+                .setCellValue(PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER);
+        headerRow.createCell(totalColumnIndex).setCellValue(RECONCILE_TOTAL_HEADER);
+
+        int rowIndex = 1;
+        for (DailyTableRowDto row : rows) {
+            Row dataRow = sheet.createRow(rowIndex++);
+            for (ExcelHeaderDto header : writePlan.sortedHeaders()) {
+                OrderFieldKey fieldKey = writePlan.fieldByColumnIndex().get(header.getColumnIndex());
+                if (fieldKey == null) {
+                    continue;
+                }
+                Cell cell = dataRow.createCell(header.getColumnIndex());
+                setCellValueFromDailyRow(cell, row, fieldKey);
+            }
+            dataRow.createCell(supplyPriceColumnIndex).setCellValue(formatPriceCell(row.getSupplyPrice()));
+            dataRow.createCell(totalColumnIndex)
+                    .setCellValue(
+                            formatPriceCell(
+                                    calculateReconcileTotal(
+                                            row.getSupplyPrice(),
+                                            row.getQuantity(),
+                                            row.getShippingFee())));
+        }
+    }
+
+    private int resolveMaxColumnIndex(List<ExcelHeaderDto> headers) {
+        int maxIndex = -1;
+        for (ExcelHeaderDto header : headers) {
+            if (header.getColumnIndex() > maxIndex) {
+                maxIndex = header.getColumnIndex();
+            }
+        }
+        return maxIndex;
+    }
+
+    private BigDecimal calculateReconcileTotal(
+            BigDecimal unitPrice, Integer quantity, BigDecimal shippingFee) {
+        BigDecimal price = unitPrice == null ? BigDecimal.ZERO : unitPrice;
+        int qty = quantity == null ? 0 : quantity;
+        BigDecimal shipping = shippingFee == null ? BigDecimal.ZERO : shippingFee;
+        return price.multiply(BigDecimal.valueOf(qty)).add(shipping);
     }
 
     private void writeTableSheet(

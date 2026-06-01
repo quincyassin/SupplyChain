@@ -243,6 +243,7 @@ class ExcelWriterServiceTest {
                 .logisticsNo("SF123456")
                 .orderNo("O1")
                 .productName("商品")
+                .quantity(2)
                 .shippingFee(new BigDecimal("8"))
                 .costPrice(new BigDecimal("12.5"))
                 .supplyPrice(new BigDecimal("15"))
@@ -254,10 +255,53 @@ class ExcelWriterServiceTest {
     try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
       var headerRow = workbook.getSheetAt(0).getRow(0);
       assertEquals("成本价", headerRow.getCell(12).getStringCellValue());
-      assertEquals(15, headerRow.getPhysicalNumberOfCells());
+      assertEquals("总计", headerRow.getCell(13).getStringCellValue());
+      assertEquals(16, headerRow.getPhysicalNumberOfCells());
       var dataRow = workbook.getSheetAt(0).getRow(1);
       assertEquals(12.5, dataRow.getCell(12).getNumericCellValue(), 0.001);
-      assertEquals("2026-05-28", dataRow.getCell(14).getStringCellValue());
+      assertEquals(33.0, dataRow.getCell(13).getNumericCellValue(), 0.001);
+      assertEquals("2026-05-28", dataRow.getCell(15).getStringCellValue());
+    }
+  }
+
+  @Test
+  void writePlatformReconcileTable_shouldAppendSupplyPriceAndTotalColumns() throws Exception {
+    ColumnMappingConfig mapping = new ColumnMappingConfig();
+    ColumnMappingItem orderNoItem = new ColumnMappingItem();
+    orderNoItem.setFieldKey(OrderFieldKey.ORDER_NO);
+    orderNoItem.setSourceIndex(0);
+    orderNoItem.setEnabled(true);
+    orderNoItem.setSortOrder(0);
+    ColumnMappingItem quantityItem = new ColumnMappingItem();
+    quantityItem.setFieldKey(OrderFieldKey.QUANTITY);
+    quantityItem.setSourceIndex(1);
+    quantityItem.setEnabled(true);
+    quantityItem.setSortOrder(1);
+    mapping.getItems().add(orderNoItem);
+    mapping.getItems().add(quantityItem);
+
+    List<ExcelHeaderDto> templateHeaders =
+        List.of(new ExcelHeaderDto(0, "订单编号"), new ExcelHeaderDto(1, "数量"));
+
+    List<DailyTableRowDto> rows =
+        List.of(
+            DailyTableRowDto.builder()
+                .orderNo("O1")
+                .quantity(3)
+                .shippingFee(new BigDecimal("5"))
+                .supplyPrice(new BigDecimal("10"))
+                .build());
+
+    byte[] bytes =
+        service.writePlatformReconcileTable("平台A对账", rows, mapping, templateHeaders);
+
+    try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
+      var headerRow = workbook.getSheetAt(0).getRow(0);
+      assertEquals("供货价", headerRow.getCell(2).getStringCellValue());
+      assertEquals("总计", headerRow.getCell(3).getStringCellValue());
+      var dataRow = workbook.getSheetAt(0).getRow(1);
+      assertEquals(10.0, dataRow.getCell(2).getNumericCellValue(), 0.001);
+      assertEquals(35.0, dataRow.getCell(3).getNumericCellValue(), 0.001);
     }
   }
 }
