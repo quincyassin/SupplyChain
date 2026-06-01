@@ -353,6 +353,120 @@ class ColumnMappingServiceTest {
     }
 
     @Test
+    void ensureLogisticsTemplateHeaders_shouldNotPrependWhenLogisticsMapped() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"),
+                        new ExcelHeaderDto(2, "备注A"),
+                        new ExcelHeaderDto(3, "备注B"));
+        List<ColumnMappingItemDto> mapping =
+                List.of(
+                        createMappingDto("orderNo", 0, true, 0),
+                        createMappingDto("productName", 1, true, 1),
+                        createMappingDto("logisticsNo", 2, true, 2),
+                        createMappingDto("logisticsCompany", 3, true, 3));
+
+        List<ExcelHeaderDto> enriched = service.ensureLogisticsTemplateHeaders(headers, mapping);
+
+        assertEquals(4, enriched.size());
+        assertEquals("备注A", enriched.get(2).getHeaderName());
+        assertEquals("备注B", enriched.get(3).getHeaderName());
+    }
+
+    @Test
+    void removeOrphanAutoLogisticsColumns_shouldDropUnusedStandardLogisticsHeaders() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "物流公司"),
+                        new ExcelHeaderDto(1, "物流单号"),
+                        new ExcelHeaderDto(2, "订单编号"),
+                        new ExcelHeaderDto(3, "商品名称"),
+                        new ExcelHeaderDto(4, "备注A"),
+                        new ExcelHeaderDto(5, "备注B"));
+        List<ColumnMappingItemDto> mapping =
+                List.of(
+                        createMappingDto("orderNo", 2, true, 0),
+                        createMappingDto("productName", 3, true, 1),
+                        createMappingDto("logisticsNo", 4, true, 2),
+                        createMappingDto("logisticsCompany", 5, true, 3));
+
+        ColumnMappingService.PlatformTemplateHeadersResolveResult resolved =
+                service.removeOrphanAutoLogisticsColumns(headers, mapping);
+
+        assertEquals(4, resolved.templateHeaders().size());
+        assertEquals("订单编号", resolved.templateHeaders().get(0).getHeaderName());
+        assertEquals("备注A", resolved.templateHeaders().get(2).getHeaderName());
+        assertEquals(
+                2,
+                resolved.mapping().stream()
+                        .filter(item -> "logisticsNo".equals(item.getFieldKey()))
+                        .findFirst()
+                        .orElseThrow()
+                        .getSourceIndex()
+                        .intValue());
+        assertEquals(
+                3,
+                resolved.mapping().stream()
+                        .filter(item -> "logisticsCompany".equals(item.getFieldKey()))
+                        .findFirst()
+                        .orElseThrow()
+                        .getSourceIndex()
+                        .intValue());
+    }
+
+    @Test
+    void resolvePlatformTemplateHeaders_shouldKeepAutoColumnsWhenLogisticsUnmapped() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"));
+        List<ColumnMappingItemDto> mapping =
+                List.of(
+                        createMappingDto("orderNo", 0, true, 0),
+                        createMappingDto("productName", 1, true, 1),
+                        createMappingDto("logisticsNo", -1, false, 2),
+                        createMappingDto("logisticsCompany", -1, false, 3));
+
+        ColumnMappingService.PlatformTemplateHeadersResolveResult resolved =
+                service.resolvePlatformTemplateHeaders(headers, mapping);
+
+        assertEquals(4, resolved.templateHeaders().size());
+        assertEquals("物流公司", resolved.templateHeaders().get(0).getHeaderName());
+        assertEquals("物流单号", resolved.templateHeaders().get(1).getHeaderName());
+        assertEquals("订单编号", resolved.templateHeaders().get(2).getHeaderName());
+    }
+
+    @Test
+    void resolvePlatformTemplateHeaders_shouldRemoveAutoColumnsWhenCustomBound() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "物流公司"),
+                        new ExcelHeaderDto(1, "物流单号"),
+                        new ExcelHeaderDto(2, "订单编号"),
+                        new ExcelHeaderDto(3, "商品名称"),
+                        new ExcelHeaderDto(4, "备注A"),
+                        new ExcelHeaderDto(5, "备注B"));
+        List<ColumnMappingItemDto> mapping =
+                List.of(
+                        createMappingDto("orderNo", 2, true, 0),
+                        createMappingDto("productName", 3, true, 1),
+                        createMappingDto("logisticsNo", 4, true, 2),
+                        createMappingDto("logisticsCompany", 5, true, 3));
+
+        ColumnMappingService.PlatformTemplateHeadersResolveResult resolved =
+                service.resolvePlatformTemplateHeaders(headers, mapping);
+
+        assertEquals(4, resolved.templateHeaders().size());
+        assertTrue(
+                resolved.templateHeaders().stream()
+                        .noneMatch(header -> "物流单号".equals(header.getHeaderName())));
+        assertTrue(
+                resolved.templateHeaders().stream()
+                        .noneMatch(header -> "物流公司".equals(header.getHeaderName())));
+    }
+
+    @Test
     void templateHeaderNamesForImportMatch_shouldIgnoreAutoLogisticsWhenUploadHasNone() {
         List<ExcelHeaderDto> templateHeaders =
                 List.of(

@@ -193,11 +193,13 @@ public class PlatformMappingTemplateService {
       throw new BusinessException("请先上传模板 Excel");
     }
 
-    List<ExcelHeaderDto> templateHeaders =
-        columnMappingService.ensureLogisticsTemplateHeaders(request.getTemplateHeaders());
+    List<ColumnMappingItemDto> filteredMapping = filterPlatformMappingDtos(request.getMapping());
+    ColumnMappingService.PlatformTemplateHeadersResolveResult resolved =
+        columnMappingService.resolvePlatformTemplateHeaders(
+            request.getTemplateHeaders(), filteredMapping);
+    List<ExcelHeaderDto> templateHeaders = resolved.templateHeaders();
     List<ColumnMappingItemDto> mappingToSave =
-        columnMappingService.mergePlatformMapping(
-            filterPlatformMappingDtos(request.getMapping()), templateHeaders);
+        columnMappingService.mergePlatformMapping(resolved.mapping(), templateHeaders);
     columnMappingService.fromDtos(mappingToSave, false);
 
     PlatformMappingTemplate entity =
@@ -222,14 +224,18 @@ public class PlatformMappingTemplateService {
   }
 
   private PlatformTemplateDetailDto toDetail(PlatformMappingTemplate entity) {
-    List<ExcelHeaderDto> templateHeaders = loadTemplateHeaders(entity);
+    List<ColumnMappingItemDto> savedMapping = readMappingDtos(entity);
+    ColumnMappingService.PlatformTemplateHeadersResolveResult resolved =
+        columnMappingService.resolvePlatformTemplateHeaders(
+            readTemplateHeaders(entity), savedMapping);
     List<ColumnMappingItemDto> mergedMapping =
-        columnMappingService.mergePlatformMapping(readMappingDtos(entity), templateHeaders);
+        columnMappingService.mergePlatformMapping(
+            resolved.mapping(), resolved.templateHeaders());
     return new PlatformTemplateDetailDto(
         entity.getPlatform(),
         entity.getTemplateFileName(),
         mergedMapping,
-        templateHeaders,
+        resolved.templateHeaders(),
         entity.getUpdatedAt());
   }
 
@@ -266,7 +272,9 @@ public class PlatformMappingTemplateService {
   }
 
   private List<ExcelHeaderDto> loadTemplateHeaders(PlatformMappingTemplate entity) {
-    return columnMappingService.ensureLogisticsTemplateHeaders(readTemplateHeaders(entity));
+    return columnMappingService
+        .resolvePlatformTemplateHeaders(readTemplateHeaders(entity), readMappingDtos(entity))
+        .templateHeaders();
   }
 
   private List<ColumnMappingItemDto> rematchMapping(

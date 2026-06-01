@@ -127,6 +127,26 @@ class ReceiptBatchParserTest {
     }
 
     @Test
+    void parse_shouldSupportMultipleLogisticsNosWithChineseCommaOnly() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632 韵达 YD-222828282828，YD-2222222222");
+
+        assertEquals(1, lines.size());
+        assertEquals("YD-222828282828,YD-2222222222", lines.get(0).logisticsNo());
+    }
+
+    @Test
+    void parse_shouldSupportMixedChineseAndEnglishCommasForLogisticsNos() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632 韵达 YD-111，YD-222,YD-333");
+
+        assertEquals(1, lines.size());
+        assertEquals("YD-111,YD-222,YD-333", lines.get(0).logisticsNo());
+    }
+
+    @Test
     void parse_shouldRejectLineWithoutThreeFields() {
         assertThrows(
                 BusinessException.class,

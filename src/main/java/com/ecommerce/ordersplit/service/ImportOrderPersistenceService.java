@@ -9,6 +9,7 @@ import com.ecommerce.ordersplit.model.AfterSalesStatus;
 import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import com.ecommerce.ordersplit.model.OrderRow;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
+import com.ecommerce.ordersplit.util.LogisticsNoUtil;
 import com.ecommerce.ordersplit.util.SystemNoGenerator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -227,7 +228,7 @@ public class ImportOrderPersistenceService {
             entity.setOrderNo(normalizeOptionalField(request.getOrderNo(), 64, "订单编号"));
         }
         if (request.getLogisticsNo() != null) {
-            entity.setLogisticsNo(normalizeOptionalField(request.getLogisticsNo(), 128, "物流单号"));
+            entity.setLogisticsNo(normalizeLogisticsNo(request.getLogisticsNo()));
         }
         if (request.getLogisticsCompany() != null) {
             entity.setLogisticsCompany(
@@ -428,6 +429,11 @@ public class ImportOrderPersistenceService {
                 || request.getCostPrice() != null
                 || request.getSupplyPrice() != null
                 || request.getRemark() != null;
+    }
+
+    private String normalizeLogisticsNo(String value) {
+        String normalized = LogisticsNoUtil.normalize(value);
+        return normalizeOptionalField(normalized, 128, "物流单号");
     }
 
     private String normalizeOptionalField(String value, int maxLength, String label) {

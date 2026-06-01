@@ -7,6 +7,7 @@ import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
 import com.ecommerce.ordersplit.service.ReceiptBatchParser.ReceiptLine;
+import com.ecommerce.ordersplit.util.LogisticsNoUtil;
 import com.ecommerce.ordersplit.util.SystemNoGenerator;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -61,7 +62,7 @@ public class ImportOrderReceiptService {
                 continue;
             }
             order.setReceiptStatus(ImportOrderReceiptStatus.RECEIPTED);
-            order.setLogisticsNo(line.logisticsNo());
+            order.setLogisticsNo(LogisticsNoUtil.normalize(line.logisticsNo()));
             order.setLogisticsCompany(line.logisticsCompany());
             updatedCount++;
         }

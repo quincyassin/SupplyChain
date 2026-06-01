@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.exception.BusinessException;
+import com.ecommerce.ordersplit.util.LogisticsNoUtil;
 import com.ecommerce.ordersplit.util.SystemNoGenerator;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -322,8 +323,8 @@ public final class ReceiptBatchParser {
         if (token == null || token.isBlank()) {
             return;
         }
-        if (token.contains(",") || token.contains("，")) {
-            for (String part : token.split("[,，]")) {
+        if (LogisticsNoUtil.containsSeparator(token)) {
+            for (String part : LogisticsNoUtil.split(token)) {
                 addLogisticsNo(logisticsNumbers, part, systemNo);
             }
             return;
@@ -342,10 +343,7 @@ public final class ReceiptBatchParser {
     }
 
     private static String joinLogisticsNos(List<String> logisticsNumbers) {
-        if (logisticsNumbers == null || logisticsNumbers.isEmpty()) {
-            return null;
-        }
-        return String.join(",", logisticsNumbers);
+        return LogisticsNoUtil.join(logisticsNumbers);
     }
 
     private static boolean isLogisticsCandidate(String value, String systemNo) {

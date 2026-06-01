@@ -1039,7 +1039,7 @@ const EDITABLE_ORDER_FIELD_CONFIG: Record<
   },
   logisticsNo: {
     maxLength: 128,
-    placeholder: "输入物流单号",
+    placeholder: "多个单号可用中文或英文逗号分隔",
     errorLabel: "物流单号",
   },
   logisticsCompany: {
@@ -3111,7 +3111,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         }}
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          每行录入一条物流信息，包含系统单号、物流单号、物流公司即可（顺序不限，系统自动识别）。同一系统单号可填写多个物流单号，用逗号分隔。
+          每行录入一条物流信息，包含系统单号、物流单号、物流公司即可（顺序不限，系统自动识别）。同一系统单号可填写多个物流单号，中文或英文逗号均可分隔。
         </Typography.Paragraph>
         <Input.TextArea
           ref={receiptTextAreaRef}
