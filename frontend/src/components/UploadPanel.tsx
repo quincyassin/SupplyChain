@@ -108,7 +108,7 @@ const ORDER_TABLE_RECEIPT_STATUS_CELL_CLASS = "order-table-col-receipt-status";
 const ORDER_TABLE_ACTION_CELL_CLASS = "order-table-col-action";
 
 const RECEIPT_PLACEHOLDER =
-  "每行一条，包含系统单号、物流单号、物流公司即可，顺序不限\n例如：\nV1StGXR8Z5jdHi6B  SF1234567890  顺丰\n圆通,YT9876543210,7c9e6679AbCdEf12";
+  "每行一条，包含系统单号、物流单号、物流公司即可，顺序不限\n同一单号可填多个物流单号，英文或中文逗号分隔\n例如：\n5205061632  韵达  单号1，单号2\n0123456789  SF1234567890  顺丰";
 
 interface DateRangeKey {
   start: string;
@@ -1223,7 +1223,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   const [filterReceiptStatus, setFilterReceiptStatus] = useState<string | null>(
     null,
   );
-  /** 关键字搜索（后端 LIKE：商家、平台、系统编号、订单编号、收货人、电话） */
+  /** 关键字搜索（后端 LIKE：商家、平台、系统编号、物流单号、订单编号） */
   const [searchKeyword, setSearchKeyword] = useState("");
   const searchKeywordRef = useRef("");
   const queryDateRangeRef = useRef(queryDateRange);
@@ -1400,12 +1400,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
       setActiveMerchant(ALL_MERCHANT_TAB_KEY);
       activeMerchantRef.current = ALL_MERCHANT_TAB_KEY;
     }
-  }, [
-    merchantGroupsForTabs,
-    activeMerchant,
-    orderDataset,
-    filterPlatform,
-  ]);
+  }, [merchantGroupsForTabs, activeMerchant, orderDataset, filterPlatform]);
 
   const clearSelectedRows = useCallback(() => {
     setSelectedSystemNos([]);
@@ -2006,7 +2001,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   );
 
   const openAfterSalesModal = useCallback((row: SplitTableRow) => {
-    if (row.afterSales === true) {
+    if (row.afterSalesStatus === "PENDING") {
       return;
     }
     setAfterSalesRow(row);
@@ -2387,23 +2382,21 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
               >
                 详情
               </Button>
-              {record.afterSales === true ? (
-                record.afterSalesStatus === "COMPLETED" ? null : (
-                  <Popconfirm
-                    title="确定取消该订单的售后标记？"
-                    description="订单不会被删除，仅恢复为无需售后状态。"
-                    onConfirm={() => void handleCancelAfterSales(record)}
+              {record.afterSalesStatus === "PENDING" ? (
+                <Popconfirm
+                  title="确定取消该订单的售后标记？"
+                  description="订单不会被删除，仅恢复为无需售后状态。"
+                  onConfirm={() => void handleCancelAfterSales(record)}
+                >
+                  <Button
+                    type="link"
+                    size="small"
+                    danger
+                    disabled={!record.systemNo}
                   >
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      disabled={!record.systemNo}
-                    >
-                      取消售后
-                    </Button>
-                  </Popconfirm>
-                )
+                    取消售后
+                  </Button>
+                </Popconfirm>
               ) : (
                 <Button
                   type="link"
@@ -2820,12 +2813,12 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                   allowClear
                   size="middle"
                   prefix={<SearchOutlined />}
-                  placeholder="搜索商家 平台 系统编号 订单编号 收货人 电话"
+                  placeholder="搜索商家、平台、系统编号、物流单号、订单编号"
                   value={searchKeyword}
                   onChange={(event) =>
                     handleTextFilterChange(event.target.value)
                   }
-                  style={{ width: 320 }}
+                  style={{ width: 350 }}
                 />
                 <Typography.Text type="secondary">回单状态</Typography.Text>
                 <Select
@@ -3120,7 +3113,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         }}
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          每行录入一条物流信息，包含系统单号、物流单号、物流公司即可（顺序不限，系统自动识别）。
+          每行录入一条物流信息，包含系统单号、物流单号、物流公司即可（顺序不限，系统自动识别）。同一系统单号可填写多个物流单号，用逗号分隔。
         </Typography.Paragraph>
         <Input.TextArea
           ref={receiptTextAreaRef}
@@ -3148,7 +3141,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         destroyOnClose
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-          请填写售后原因，提交后该订单将被标记为需售后，并出现在「售后」页面。
+          请填写本次售后原因。提交后订单将标记为「需售后」，并出现在「售后」页面；已完结的订单也可再次发起售后。
         </Typography.Paragraph>
         <Input.TextArea
           value={afterSalesRemark}

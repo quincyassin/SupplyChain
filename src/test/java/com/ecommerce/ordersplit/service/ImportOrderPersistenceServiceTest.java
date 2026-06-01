@@ -112,6 +112,62 @@ class ImportOrderPersistenceServiceTest {
   }
 
   @Test
+  void saveSplitOrders_shouldImportAfterSalesRemarkAsPendingAfterSales() {
+    Map<String, List<OrderRow>> split = new LinkedHashMap<>();
+    split.put(
+        "商家A",
+        List.of(
+            OrderRow.builder()
+                .orderNo("O003")
+                .merchant("商家A")
+                .productName("商品")
+                .sku("规格")
+                .quantity(1)
+                .afterSalesRemark("  商品破损  ")
+                .sourceRowNum(2)
+                .build()));
+
+    when(productPriceService.buildLookupForImport(anyList()))
+        .thenReturn(new ImportPriceLookup(Map.of(), Map.of()));
+
+    persistenceService.saveSplitOrders(
+        100L, "淘宝", split, LocalDateTime.of(2026, 5, 29, 10, 0));
+
+    ArgumentCaptor<List<ImportOrder>> captor = ArgumentCaptor.forClass(List.class);
+    verify(importOrderRepository).saveAll(captor.capture());
+    ImportOrder row = captor.getValue().get(0);
+    assertEquals(true, row.getAfterSales());
+    assertEquals(AfterSalesStatus.PENDING, row.getAfterSalesStatus());
+    assertEquals("商品破损", row.getAfterSalesRemark());
+  }
+
+  @Test
+  void saveSplitOrders_shouldDefaultEmptyShippingFeeToZero() {
+    Map<String, List<OrderRow>> split = new LinkedHashMap<>();
+    split.put(
+        "商家A",
+        List.of(
+            OrderRow.builder()
+                .orderNo("O002")
+                .merchant("商家A")
+                .productName("商品")
+                .sku("规格")
+                .quantity(1)
+                .sourceRowNum(2)
+                .build()));
+
+    when(productPriceService.buildLookupForImport(anyList()))
+        .thenReturn(new ImportPriceLookup(Map.of(), Map.of()));
+
+    persistenceService.saveSplitOrders(
+        100L, "淘宝", split, new DailyTableService().currentIssueDateTime());
+
+    ArgumentCaptor<List<ImportOrder>> captor = ArgumentCaptor.forClass(List.class);
+    verify(importOrderRepository).saveAll(captor.capture());
+    assertEquals(0, captor.getValue().get(0).getShippingFee().compareTo(BigDecimal.ZERO));
+  }
+
+  @Test
   void deleteTodayOrder_shouldRemoveEntity() {
     ImportOrder entity = new ImportOrder();
     entity.setSystemNo(SYSTEM_NO_1);
@@ -319,6 +375,41 @@ class ImportOrderPersistenceServiceTest {
         com.ecommerce.ordersplit.exception.BusinessException.class,
         () -> persistenceService.markOrderAfterSales(SYSTEM_NO_1, today, "   "));
     verifyNoInteractions(importOrderRepository);
+  }
+
+  @Test
+  void markOrderAfterSales_shouldAllowReopenAfterCompleted() {
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+    LocalDateTime issueDate = today.atStartOfDay().plusHours(10);
+    ImportOrder entity = new ImportOrder();
+    entity.setSystemNo(SYSTEM_NO_1);
+    entity.setIssueDate(issueDate);
+    entity.setAfterSales(true);
+    entity.setAfterSalesStatus(AfterSalesStatus.COMPLETED);
+    entity.setAfterSalesRemark("第一次售后");
+    entity.setAfterSalesAt(issueDate.plusHours(1));
+    when(importOrderRepository.findById(SYSTEM_NO_1)).thenReturn(Optional.of(entity));
+
+    persistenceService.markOrderAfterSales(SYSTEM_NO_1, today, "第二次售后");
+
+    assertEquals(AfterSalesStatus.PENDING, entity.getAfterSalesStatus());
+    assertEquals("第二次售后", entity.getAfterSalesRemark());
+    assertEquals(true, entity.getAfterSales());
+  }
+
+  @Test
+  void markOrderAfterSales_shouldRejectWhenPending() {
+    LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+    ImportOrder entity = new ImportOrder();
+    entity.setSystemNo(SYSTEM_NO_1);
+    entity.setIssueDate(today.atStartOfDay());
+    entity.setAfterSales(true);
+    entity.setAfterSalesStatus(AfterSalesStatus.PENDING);
+    when(importOrderRepository.findById(SYSTEM_NO_1)).thenReturn(Optional.of(entity));
+
+    assertThrows(
+        com.ecommerce.ordersplit.exception.BusinessException.class,
+        () -> persistenceService.markOrderAfterSales(SYSTEM_NO_1, today, "重复标记"));
   }
 
   @Test

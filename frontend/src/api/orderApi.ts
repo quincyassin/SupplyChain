@@ -949,6 +949,12 @@ export interface ReconcileExportPayload {
   platform?: string;
 }
 
+export interface AfterSalesExportPayload {
+  startDate: string;
+  endDate: string;
+  keyword?: string;
+}
+
 async function downloadExcelExport(path: string, body: unknown): Promise<Blob> {
   try {
     const response = await client.post(path, body, { responseType: "blob" });
@@ -974,6 +980,12 @@ export async function exportPlatformReconcile(
   payload: ReconcileExportPayload,
 ): Promise<Blob> {
   return downloadExcelExport("/export/reconcile/platform", payload);
+}
+
+export async function exportAfterSalesOrders(
+  payload: AfterSalesExportPayload,
+): Promise<Blob> {
+  return downloadExcelExport("/export/after-sales", payload);
 }
 
 export async function exportSelectedOrders(systemNos: string[]): Promise<Blob> {

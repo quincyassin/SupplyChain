@@ -87,9 +87,22 @@ class ColumnMappingServiceTest {
     }
 
     @Test
+    void suggestMapping_shouldMatchAfterSalesRemarkHeader() {
+        List<String> headers = Arrays.asList("订单编号", "售后原因");
+        ColumnMappingConfig config = service.suggestMapping(headers);
+
+        assertTrue(
+                config.getItems().stream()
+                        .anyMatch(
+                                item -> item.getFieldKey() == OrderFieldKey.AFTER_SALES_REMARK
+                                        && item.getSourceIndex() == 1
+                                        && item.isEnabled()));
+    }
+
+    @Test
     void defaultMapping_shouldContainStandardFields() {
         ColumnMappingConfig config = service.defaultMapping();
-        assertEquals(11, config.getItems().size());
+        assertEquals(12, config.getItems().size());
         assertEquals(OrderFieldKey.ORDER_NO, config.getItems().get(0).getFieldKey());
         assertEquals(OrderFieldKey.PRODUCT_NAME, config.getItems().get(1).getFieldKey());
         assertEquals(OrderFieldKey.LOGISTICS_NO, config.getItems().get(2).getFieldKey());
@@ -221,7 +234,7 @@ class ColumnMappingServiceTest {
 
         List<ColumnMappingItemDto> merged = service.mergePlatformMapping(saved, headers);
 
-        assertEquals(11, merged.size());
+        assertEquals(12, merged.size());
         assertTrue(
                 merged.stream()
                         .anyMatch(
@@ -281,6 +294,55 @@ class ColumnMappingServiceTest {
                         .orElseThrow();
         assertEquals(2, sku.getSourceIndex().intValue());
         assertEquals(true, sku.getEnabled());
+    }
+
+    @Test
+    void ensureLogisticsTemplateHeaders_shouldPrependMissingLogisticsColumns() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"));
+
+        List<ExcelHeaderDto> enriched = service.ensureLogisticsTemplateHeaders(headers);
+
+        assertEquals(4, enriched.size());
+        assertEquals("物流公司", enriched.get(0).getHeaderName());
+        assertEquals(0, enriched.get(0).getColumnIndex());
+        assertEquals("物流单号", enriched.get(1).getHeaderName());
+        assertEquals(1, enriched.get(1).getColumnIndex());
+        assertEquals("订单编号", enriched.get(2).getHeaderName());
+        assertEquals(2, enriched.get(2).getColumnIndex());
+        assertEquals("商品名称", enriched.get(3).getHeaderName());
+        assertEquals(3, enriched.get(3).getColumnIndex());
+    }
+
+    @Test
+    void ensureLogisticsTemplateHeaders_shouldKeepExistingLogisticsAliases() {
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "快递单号"),
+                        new ExcelHeaderDto(5, "承运商"));
+
+        List<ExcelHeaderDto> enriched = service.ensureLogisticsTemplateHeaders(headers);
+
+        assertEquals(3, enriched.size());
+    }
+
+    @Test
+    void templateHeaderNamesForImportMatch_shouldIgnoreAutoLogisticsWhenUploadHasNone() {
+        List<ExcelHeaderDto> templateHeaders =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"),
+                        new ExcelHeaderDto(2, "物流单号"),
+                        new ExcelHeaderDto(3, "物流公司"));
+
+        List<String> matchNames =
+                service.templateHeaderNamesForImportMatch(
+                        templateHeaders, List.of("订单编号", "商品名称"));
+
+        assertEquals(List.of("订单编号", "商品名称"), matchNames);
     }
 
     @Test

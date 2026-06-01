@@ -152,6 +152,10 @@ public class ImportOrderPersistenceService {
         }
         String normalizedRemark = normalizeAfterSalesRemark(remark);
         ImportOrder entity = requireOrderForDate(systemNo, date);
+        AfterSalesStatus status = entity.getAfterSalesStatus();
+        if (status == AfterSalesStatus.PENDING) {
+            throw new BusinessException("该订单已在售后处理中，请先取消或完结后再发起");
+        }
         entity.setAfterSales(true);
         entity.setAfterSalesStatus(AfterSalesStatus.PENDING);
         entity.setAfterSalesRemark(normalizedRemark);
@@ -439,6 +443,9 @@ public class ImportOrderPersistenceService {
     }
 
     private BigDecimal normalizeShippingFee(BigDecimal shippingFee) {
+        if (shippingFee == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
         if (shippingFee.compareTo(BigDecimal.ZERO) < 0) {
             throw new BusinessException("运费不能为负数");
         }
@@ -472,6 +479,25 @@ public class ImportOrderPersistenceService {
         return value != null && !value.isBlank();
     }
 
+    private void applyImportedAfterSales(
+            ImportOrder entity, String afterSalesRemark, LocalDateTime issueDateTime) {
+        if (afterSalesRemark == null || afterSalesRemark.isBlank()) {
+            entity.setAfterSales(false);
+            entity.setAfterSalesStatus(AfterSalesStatus.NONE);
+            entity.setAfterSalesRemark(null);
+            entity.setAfterSalesAt(null);
+            return;
+        }
+        String normalized = afterSalesRemark.trim();
+        if (normalized.length() > AFTER_SALES_REMARK_MAX_LENGTH) {
+            throw new BusinessException("售后原因不能超过 " + AFTER_SALES_REMARK_MAX_LENGTH + " 个字符");
+        }
+        entity.setAfterSales(true);
+        entity.setAfterSalesStatus(AfterSalesStatus.PENDING);
+        entity.setAfterSalesRemark(normalized);
+        entity.setAfterSalesAt(issueDateTime);
+    }
+
     private ImportOrder toEntity(
             Long taskId,
             String platform,
@@ -492,11 +518,10 @@ public class ImportOrderPersistenceService {
         entity.setReceiver(display.getReceiver());
         entity.setAddress(display.getAddress());
         entity.setPhone(display.getPhone());
-        entity.setShippingFee(display.getShippingFee());
+        entity.setShippingFee(normalizeShippingFee(display.getShippingFee()));
         entity.setRemark(display.getRemark());
+        applyImportedAfterSales(entity, source.getAfterSalesRemark(), issueDateTime);
         entity.setReceiptStatus(ImportOrderReceiptStatus.PENDING);
-        entity.setAfterSales(false);
-        entity.setAfterSalesStatus(AfterSalesStatus.NONE);
         entity.setIssueDate(issueDateTime);
         entity.setSourceRowNum(source.getSourceRowNum() > 0 ? source.getSourceRowNum() : null);
         return entity;

@@ -51,7 +51,7 @@ class FieldAliasConfigServiceTest {
 
         fieldAliasConfigService.ensureDefaults();
 
-        verify(fieldAliasConfigRepository, times(11)).save(any(FieldAliasConfig.class));
+        verify(fieldAliasConfigRepository, times(12)).save(any(FieldAliasConfig.class));
     }
 
     @Test

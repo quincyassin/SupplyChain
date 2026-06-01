@@ -17,12 +17,14 @@ import {
   message,
 } from "antd";
 import dayjs, { Dayjs } from "dayjs";
-import { SearchOutlined } from "@ant-design/icons";
+import { SearchOutlined, DownloadOutlined } from "@ant-design/icons";
 import type { ColumnsType } from "antd/es/table";
 import {
   AfterSalesStatus,
   cancelImportedOrderAfterSales,
   completeImportedOrderAfterSales,
+  downloadBlob,
+  exportAfterSalesOrders,
   fetchAfterSalesOrders,
   formatLocalDateKey,
   PENDING_SPLIT_MERCHANT,
@@ -132,6 +134,7 @@ export default function AfterSalesPage() {
   );
   const [tablePage, setTablePage] = useState(1);
   const [tablePageSize, setTablePageSize] = useState(20);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     queryDateRangeRef.current = queryDateRange;
@@ -272,6 +275,31 @@ export default function AfterSalesPage() {
     },
     [loadAfterSalesOrders],
   );
+
+  const handleExport = useCallback(async () => {
+    const range = queryDateRangeRef.current;
+    setExporting(true);
+    setErrorAlert(null);
+    try {
+      const blob = await exportAfterSalesOrders({
+        startDate: range.start,
+        endDate: range.end,
+        keyword: searchKeywordRef.current.trim() || undefined,
+      });
+      const rangeLabel =
+        range.start === range.end
+          ? range.start
+          : `${range.start}_${range.end}`;
+      downloadBlob(blob, `售后订单_${rangeLabel}.xlsx`);
+      message.success("售后订单导出成功");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "导出失败";
+      setErrorAlert(msg);
+      message.error(msg);
+    } finally {
+      setExporting(false);
+    }
+  }, []);
 
   const pageRows = useMemo(() => {
     if (!splitResult?.pageRows) {
@@ -459,7 +487,7 @@ export default function AfterSalesPage() {
         />
       )}
 
-      <div className="after-sales-toolbar">
+      <div className="toolbar">
         <Space wrap size="middle" align="center">
           <Typography.Text type="secondary">分单日期</Typography.Text>
           <RangePicker
@@ -491,6 +519,15 @@ export default function AfterSalesPage() {
               {statusFilterLabel} {splitResult.totalRows} 条
             </Tag>
           )}
+          <Button
+            type="primary"
+            size="middle"
+            icon={<DownloadOutlined />}
+            loading={exporting}
+            onClick={() => void handleExport()}
+          >
+            售后信息导出
+          </Button>
         </Space>
       </div>
 

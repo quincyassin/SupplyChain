@@ -68,7 +68,7 @@ public class PlatformMappingTemplateService {
   public PlatformExportTemplateDto resolveExportTemplate(String platform) {
     String normalized = normalizePlatform(platform);
     PlatformMappingTemplate entity = getRequired(normalized);
-    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    List<ExcelHeaderDto> templateHeaders = loadTemplateHeaders(entity);
     if (templateHeaders.isEmpty()) {
       throw new BusinessException("平台「" + normalized + "」尚未上传模板 Excel，请先在系统配置中配置表头映射");
     }
@@ -76,8 +76,6 @@ public class PlatformMappingTemplateService {
     if (mappingDtos.isEmpty()) {
       throw new BusinessException("平台「" + normalized + "」尚未配置列映射");
     }
-    List<String> headerNames =
-        templateHeaders.stream().map(ExcelHeaderDto::getHeaderName).toList();
     List<ColumnMappingItemDto> mergedMapping =
         columnMappingService.mergePlatformMapping(mappingDtos, templateHeaders);
     ColumnMappingConfig mapping = columnMappingService.fromDtos(mergedMapping, false);
@@ -103,11 +101,10 @@ public class PlatformMappingTemplateService {
 
     List<TemplateHeaderMatch> qualified = new ArrayList<>();
     for (PlatformMappingTemplate entity : templates) {
+      List<ExcelHeaderDto> templateHeaders = loadTemplateHeaders(entity);
       List<String> templateHeaderNames =
-          readTemplateHeaders(entity).stream()
-              .map(ExcelHeaderDto::getHeaderName)
-              .filter(name -> name != null && !name.isBlank())
-              .toList();
+          columnMappingService.templateHeaderNamesForImportMatch(
+              templateHeaders, normalizedUpload);
       if (templateHeaderNames.isEmpty()) {
         continue;
       }
@@ -158,7 +155,7 @@ public class PlatformMappingTemplateService {
                     new BusinessException(
                         "平台「" + normalized + "」尚未配置表头模板，请先在系统配置中添加"));
 
-    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    List<ExcelHeaderDto> templateHeaders = loadTemplateHeaders(entity);
     List<ColumnMappingItemDto> savedMapping = readMappingDtos(entity);
 
     List<ColumnMappingItemDto> rematched =
@@ -196,16 +193,18 @@ public class PlatformMappingTemplateService {
       throw new BusinessException("请先上传模板 Excel");
     }
 
+    List<ExcelHeaderDto> templateHeaders =
+        columnMappingService.ensureLogisticsTemplateHeaders(request.getTemplateHeaders());
     List<ColumnMappingItemDto> mappingToSave =
         columnMappingService.mergePlatformMapping(
-            filterPlatformMappingDtos(request.getMapping()), request.getTemplateHeaders());
+            filterPlatformMappingDtos(request.getMapping()), templateHeaders);
     columnMappingService.fromDtos(mappingToSave, false);
 
     PlatformMappingTemplate entity =
         templateRepository.findByPlatform(normalized).orElseGet(PlatformMappingTemplate::new);
     entity.setPlatform(normalized);
     entity.setMappingJson(writeJson(mappingToSave));
-    entity.setTemplateHeadersJson(writeJson(request.getTemplateHeaders()));
+    entity.setTemplateHeadersJson(writeJson(templateHeaders));
     entity.setTemplateFileName(request.getTemplateFileName());
     templateRepository.save(entity);
     return toDetail(entity);
@@ -223,7 +222,7 @@ public class PlatformMappingTemplateService {
   }
 
   private PlatformTemplateDetailDto toDetail(PlatformMappingTemplate entity) {
-    List<ExcelHeaderDto> templateHeaders = readTemplateHeaders(entity);
+    List<ExcelHeaderDto> templateHeaders = loadTemplateHeaders(entity);
     List<ColumnMappingItemDto> mergedMapping =
         columnMappingService.mergePlatformMapping(readMappingDtos(entity), templateHeaders);
     return new PlatformTemplateDetailDto(
@@ -264,6 +263,10 @@ public class PlatformMappingTemplateService {
     } catch (Exception ex) {
       throw new BusinessException("平台模板表头数据损坏");
     }
+  }
+
+  private List<ExcelHeaderDto> loadTemplateHeaders(PlatformMappingTemplate entity) {
+    return columnMappingService.ensureLogisticsTemplateHeaders(readTemplateHeaders(entity));
   }
 
   private List<ColumnMappingItemDto> rematchMapping(

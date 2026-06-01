@@ -1,6 +1,6 @@
 package com.ecommerce.ordersplit.controller;
 
-import com.ecommerce.ordersplit.dto.AssignMerchantResult;
+import com.ecommerce.ordersplit.dto.AfterSalesExportRequest;
 import com.ecommerce.ordersplit.dto.BatchReceiptRequest;
 import com.ecommerce.ordersplit.dto.BatchReceiptResponse;
 import com.ecommerce.ordersplit.dto.ExportSelectedRequest;
@@ -274,6 +274,15 @@ public class OrderController {
     public ResponseEntity<Resource> exportPlatformReconcile(
             @RequestBody ReconcileExportRequest request) {
         return orderProcessService.exportPlatformReconcile(request);
+    }
+
+    /**
+     * 售后订单导出（按售后状态排序）
+     */
+    @PostMapping("/export/after-sales")
+    public ResponseEntity<Resource> exportAfterSalesOrders(
+            @RequestBody AfterSalesExportRequest request) {
+        return orderProcessService.exportAfterSalesOrders(request);
     }
 
     /**

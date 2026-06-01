@@ -1,5 +1,6 @@
 package com.ecommerce.ordersplit.service;
 
+import com.ecommerce.ordersplit.dto.AfterSalesExportRequest;
 import com.ecommerce.ordersplit.dto.AssignMerchantResult;
 import com.ecommerce.ordersplit.dto.DailyTableRowDto;
 import com.ecommerce.ordersplit.dto.ExcelHeaderDto;
@@ -75,6 +76,7 @@ public class OrderProcessService {
     private final FolderOpenService folderOpenService;
     private final ExportDownloadCacheService exportDownloadCacheService;
     private final ReconcileExportService reconcileExportService;
+    private final AfterSalesExportService afterSalesExportService;
 
     public List<OrderFieldDto> listOrderFields() {
         return columnMappingService.listFields();
@@ -82,7 +84,9 @@ public class OrderProcessService {
 
     /** 配置页上传模板时使用（自动匹配，不要求已保存平台模板） */
     public ReadHeadersResponse suggestHeaders(MultipartFile file) {
-        List<ExcelHeaderDto> headers = excelParserService.readHeaders(file);
+        List<ExcelHeaderDto> headers =
+                columnMappingService.ensureLogisticsTemplateHeaders(
+                        excelParserService.readHeaders(file));
         ColumnMappingConfig suggested = columnMappingService.suggestMappingFromHeaders(headers);
         return new ReadHeadersResponse(
                 headers,
@@ -744,6 +748,29 @@ public class OrderProcessService {
             String downloadName =
                     buildReconcileDownloadName(
                             "平台对账", platformLabel, request.getStartDate(), request.getEndDate());
+            return buildExcelDownloadResponse(outputBytes, downloadName);
+        } catch (IOException ex) {
+            throw new BusinessException("导出 Excel 失败: " + ex.getMessage());
+        }
+    }
+
+    /**
+     * 售后订单导出（按售后状态排序：需售后在前，售后完结在后）
+     */
+    @Transactional(readOnly = true)
+    public ResponseEntity<Resource> exportAfterSalesOrders(AfterSalesExportRequest request) {
+        if (request == null) {
+            throw new BusinessException("请选择日期区间");
+        }
+        try {
+            byte[] outputBytes =
+                    afterSalesExportService.exportAfterSalesOrders(
+                            request.getStartDate(), request.getEndDate(), request.getKeyword());
+            String rangeLabel =
+                    request.getStartDate().equals(request.getEndDate())
+                            ? request.getStartDate().toString()
+                            : request.getStartDate() + "_" + request.getEndDate();
+            String downloadName = "售后订单_" + rangeLabel + ".xlsx";
             return buildExcelDownloadResponse(outputBytes, downloadName);
         } catch (IOException ex) {
             throw new BusinessException("导出 Excel 失败: " + ex.getMessage());

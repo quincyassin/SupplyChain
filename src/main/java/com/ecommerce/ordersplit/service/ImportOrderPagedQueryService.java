@@ -28,10 +28,9 @@ public class ImportOrderPagedQueryService {
              AND (
                o.merchant LIKE :likePattern ESCAPE '\\\\'
                OR IFNULL(o.platform, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.receiver, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.phone, '') LIKE :likePattern ESCAPE '\\\\'
                OR IFNULL(o.system_no, '') LIKE :likePattern ESCAPE '\\\\'
+               OR IFNULL(o.logistics_no, '') LIKE :likePattern ESCAPE '\\\\'
+               OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
              )
             """;
 

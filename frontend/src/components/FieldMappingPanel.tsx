@@ -4,7 +4,6 @@ import {
   Form,
   Input,
   Modal,
-  Space,
   Spin,
   Table,
   Tag,
@@ -123,21 +122,26 @@ export default function FieldMappingPanel() {
       title: "系统字段",
       dataIndex: "label",
       width: 140,
-      render: (label: string) => <Typography.Text strong>{label}</Typography.Text>,
+      render: (label: string) => (
+        <Typography.Text strong>{label}</Typography.Text>
+      ),
     },
     {
       title: "匹配别名",
       dataIndex: "aliases",
-      render: (aliases: string[] | undefined) =>
-        aliases && aliases.length > 0 ? (
-          <Space size={[4, 4]} wrap>
-            {aliases.map((alias) => (
-              <Tag key={alias}>{alias}</Tag>
-            ))}
-          </Space>
-        ) : (
-          <Typography.Text type="secondary">暂无别名，仅匹配系统字段名</Typography.Text>
-        ),
+      render: (aliases: string[] | undefined, record) => (
+        <div
+          className="merchant-keyword-tags merchant-keyword-tags--editable"
+          title="点击编辑别名"
+          onClick={() => openEdit(record)}
+        >
+          {aliases && aliases.length > 0 ? (
+            aliases.map((alias) => <Tag key={alias}>{alias}</Tag>)
+          ) : (
+            <Typography.Text type="secondary">点击添加别名</Typography.Text>
+          )}
+        </div>
+      ),
     },
     {
       title: "操作",
@@ -161,11 +165,15 @@ export default function FieldMappingPanel() {
     <Spin spinning={loading} wrapperClassName="field-mapping-panel-wrap">
       <div className="config-panel field-mapping-panel">
         <Typography.Paragraph type="secondary" className="config-panel-intro">
-          配置 Excel 表头与系统字段的别名关系。导入时将优先按此处别名智能匹配，例如「收货人」可匹配
-          「收件人」「姓名」等表头，减少手工选列。
+          配置 Excel
+          表头与系统字段的别名关系。导入时将优先按此处别名智能匹配，例如「收货人」可匹配
+          「收件人」「姓名」等表头。点击匹配别名或右侧「编辑」均可修改。
         </Typography.Paragraph>
 
-        <div ref={tableAreaRef} className="config-panel-table-area field-mapping-table-area">
+        <div
+          ref={tableAreaRef}
+          className="config-panel-table-area field-mapping-table-area"
+        >
           <Table
             rowKey="fieldKey"
             bordered
@@ -197,7 +205,8 @@ export default function FieldMappingPanel() {
           onFinish={(values) => void handleSave(values)}
         >
           <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
-            系统字段「{editing?.label}」已自动参与匹配，此处只需填写额外别名。每行一个，或用逗号分隔。
+            系统字段「{editing?.label}
+            」已自动参与匹配，此处只需填写额外别名。每行一个，或用逗号分隔。
           </Typography.Paragraph>
           <Form.Item name="aliasesText" label="别名列表">
             <Input.TextArea

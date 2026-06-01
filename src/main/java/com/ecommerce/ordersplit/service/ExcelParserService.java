@@ -188,9 +188,12 @@ public class ExcelParserService {
                     .phone(getFieldString(row, fieldIndexMap, OrderFieldKey.PHONE))
                     .shippingFee(parseDecimalField(row, fieldIndexMap, OrderFieldKey.SHIPPING_FEE))
                     .remark(getFieldString(row, fieldIndexMap, OrderFieldKey.REMARK))
+                    .afterSalesRemark(
+                            getFieldString(row, fieldIndexMap, OrderFieldKey.AFTER_SALES_REMARK))
                     .sourceRowNum(i + 1)
                     .build();
             fillAmountIfMissing(orderRow);
+            ensureDefaultShippingFee(orderRow);
             rows.add(orderRow);
         }
         if (rows.isEmpty()) {
@@ -259,6 +262,12 @@ public class ExcelParserService {
             } else {
                 row.setAmount(BigDecimal.ZERO);
             }
+        }
+    }
+
+    private void ensureDefaultShippingFee(OrderRow row) {
+        if (row.getShippingFee() == null) {
+            row.setShippingFee(BigDecimal.ZERO);
         }
     }
 

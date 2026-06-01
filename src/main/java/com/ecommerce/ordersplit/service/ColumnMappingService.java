@@ -41,7 +41,8 @@ public class ColumnMappingService {
             OrderFieldKey.SKU,
             OrderFieldKey.QUANTITY,
             OrderFieldKey.SHIPPING_FEE,
-            OrderFieldKey.REMARK
+            OrderFieldKey.REMARK,
+            OrderFieldKey.AFTER_SALES_REMARK
     };
 
     private final ObjectMapper objectMapper;
@@ -220,6 +221,74 @@ public class ColumnMappingService {
     }
 
     /**
+     * 平台模板表头补全：若缺少物流公司/物流单号，在最前面按「物流公司、物流单号」顺序插入
+     */
+    public List<ExcelHeaderDto> ensureLogisticsTemplateHeaders(List<ExcelHeaderDto> templateHeaders) {
+        if (templateHeaders == null || templateHeaders.isEmpty()) {
+            return List.of();
+        }
+        boolean hasCompany =
+                hasTemplateHeaderForField(templateHeaders, OrderFieldKey.LOGISTICS_COMPANY);
+        boolean hasNo = hasTemplateHeaderForField(templateHeaders, OrderFieldKey.LOGISTICS_NO);
+        if (hasCompany && hasNo) {
+            return new ArrayList<>(templateHeaders);
+        }
+
+        List<ExcelHeaderDto> toPrepend = new ArrayList<>();
+        if (!hasCompany) {
+            toPrepend.add(new ExcelHeaderDto(0, OrderFieldKey.LOGISTICS_COMPANY.getLabel()));
+        }
+        if (!hasNo) {
+            toPrepend.add(new ExcelHeaderDto(0, OrderFieldKey.LOGISTICS_NO.getLabel()));
+        }
+        int prependCount = toPrepend.size();
+        for (int i = 0; i < toPrepend.size(); i++) {
+            toPrepend.get(i).setColumnIndex(i);
+        }
+
+        List<ExcelHeaderDto> result = new ArrayList<>(toPrepend);
+        for (ExcelHeaderDto existing : templateHeaders) {
+            result.add(
+                    new ExcelHeaderDto(
+                            existing.getColumnIndex() + prependCount, existing.getHeaderName()));
+        }
+        return result;
+    }
+
+    /**
+     * 订单导入匹配平台模板时：模板中自动补的物流列若上传 Excel 没有，则不参与 100% 表头校验
+     */
+    public List<String> templateHeaderNamesForImportMatch(
+            List<ExcelHeaderDto> templateHeaders, List<String> uploadHeaderNames) {
+        if (templateHeaders == null || templateHeaders.isEmpty()) {
+            return List.of();
+        }
+        List<String> normalizedUpload =
+                uploadHeaderNames == null ? List.of() : uploadHeaderNames;
+        boolean uploadHasLogisticsNo =
+                uploadHasLogisticsField(normalizedUpload, OrderFieldKey.LOGISTICS_NO);
+        boolean uploadHasLogisticsCompany =
+                uploadHasLogisticsField(normalizedUpload, OrderFieldKey.LOGISTICS_COMPANY);
+        List<String> result = new ArrayList<>();
+        for (ExcelHeaderDto header : templateHeaders) {
+            String name = header.getHeaderName();
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            if (fieldAliasConfigService.headerMatchesField(name, OrderFieldKey.LOGISTICS_NO)
+                    && !uploadHasLogisticsNo) {
+                continue;
+            }
+            if (fieldAliasConfigService.headerMatchesField(name, OrderFieldKey.LOGISTICS_COMPANY)
+                    && !uploadHasLogisticsCompany) {
+                continue;
+            }
+            result.add(name);
+        }
+        return result;
+    }
+
+    /**
      * 将已保存映射与标准系统字段合并，确保物流等新增字段默认出现在平台模板中
      */
     public List<ColumnMappingItemDto> mergePlatformMapping(
@@ -375,6 +444,26 @@ public class ColumnMappingService {
     private boolean columnExistsInTemplate(List<ExcelHeaderDto> headers, int columnIndex) {
         for (ExcelHeaderDto header : headers) {
             if (header.getColumnIndex() == columnIndex) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasTemplateHeaderForField(
+            List<ExcelHeaderDto> headers, OrderFieldKey fieldKey) {
+        for (ExcelHeaderDto header : headers) {
+            if (fieldAliasConfigService.headerMatchesField(header.getHeaderName(), fieldKey)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean uploadHasLogisticsField(
+            List<String> uploadHeaderNames, OrderFieldKey fieldKey) {
+        for (String headerName : uploadHeaderNames) {
+            if (fieldAliasConfigService.headerMatchesField(headerName, fieldKey)) {
                 return true;
             }
         }

@@ -66,6 +66,7 @@ public class ExcelWriterService {
             "收货人电话",
             "收货人地址",
             "运费",
+            "售后原因",
             "备注",
             "分单日期"
     };
@@ -77,6 +78,30 @@ public class ExcelWriterService {
             "物流公司",
             "物流单号",
             "订单编号",
+            "商品名称",
+            "规格",
+            "数量",
+            "收货人",
+            "收货人电话",
+            "收货人地址",
+            "运费",
+            "售后原因",
+            "备注",
+            "分单日期"
+    };
+
+    /** 售后订单导出：售后字段在前，按售后状态排序后写出 */
+    private static final String[] AFTER_SALES_EXPORT_HEADERS = {
+            "售后状态",
+            "售后时间",
+            "售后原因",
+            "回单状态",
+            "商家",
+            "平台",
+            "系统编号",
+            "订单编号",
+            "物流单号",
+            "物流公司",
             "商品名称",
             "规格",
             "数量",
@@ -104,12 +129,14 @@ public class ExcelWriterService {
             "运费",
             "成本价",
             "总价",
+            "售后原因",
             "备注",
             "分单日期"
     };
 
     private static final String RECONCILE_TOTAL_HEADER = "总价";
     private static final String PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER = "供货价";
+    private static final String AFTER_SALES_REMARK_HEADER = "售后原因";
 
     /**
      * 写出当日发单表格
@@ -163,6 +190,18 @@ public class ExcelWriterService {
         return writeReconcileTable(sheetTitle, rows);
     }
 
+    /**
+     * 售后订单导出
+     */
+    public byte[] writeAfterSalesTable(List<DailyTableRowDto> rows) throws IOException {
+        try (SXSSFWorkbook workbook = createStreamingWorkbook();
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+            writeAfterSalesSheet(workbook.createSheet("售后订单"), rows);
+            workbook.write(outputStream);
+            return outputStream.toByteArray();
+        }
+    }
+
     private byte[] writeReconcileTable(String sheetTitle, List<DailyTableRowDto> rows)
             throws IOException {
         try (SXSSFWorkbook workbook = createStreamingWorkbook();
@@ -184,16 +223,12 @@ public class ExcelWriterService {
             List<ExcelHeaderDto> templateHeaders)
             throws IOException {
         ReceiptWritePlan writePlan = resolveReceiptWritePlan(platformKey, mapping, templateHeaders);
-        int supplyPriceColumnIndex = resolveMaxColumnIndex(writePlan.sortedHeaders()) + 1;
-        int totalColumnIndex = supplyPriceColumnIndex + 1;
         try (SXSSFWorkbook workbook = createStreamingWorkbook();
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
             writePlatformReconcileSheet(
                     workbook.createSheet(sanitizeSheetName(sheetTitle)),
                     rows,
-                    writePlan,
-                    supplyPriceColumnIndex,
-                    totalColumnIndex);
+                    writePlan);
             workbook.write(outputStream);
             return outputStream.toByteArray();
         }
@@ -327,6 +362,44 @@ public class ExcelWriterService {
         dataRow.createCell(col++)
                 .setCellValue(
                         row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesRemark()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
+        dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
+    }
+
+    private void writeAfterSalesSheet(Sheet sheet, List<DailyTableRowDto> rows) {
+        Row headerRow = sheet.createRow(0);
+        for (int i = 0; i < AFTER_SALES_EXPORT_HEADERS.length; i++) {
+            headerRow.createCell(i).setCellValue(AFTER_SALES_EXPORT_HEADERS[i]);
+        }
+        int rowIndex = 1;
+        for (DailyTableRowDto row : rows) {
+            writeAfterSalesDataRow(sheet.createRow(rowIndex++), row);
+        }
+    }
+
+    private void writeAfterSalesDataRow(Row dataRow, DailyTableRowDto row) {
+        int col = 0;
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesStatusLabel()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesAt()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesRemark()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getReceiptStatusLabel()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getMerchant()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getPlatform()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSystemNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getOrderNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsCompany()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getProductName()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSpec()));
+        dataRow.createCell(col++)
+                .setCellValue(row.getQuantity() == null ? 0 : row.getQuantity());
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getReceiver()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getPhone()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAddress()));
+        dataRow.createCell(col++)
+                .setCellValue(
+                        row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
         dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
     }
@@ -365,19 +438,27 @@ public class ExcelWriterService {
                         formatPriceCell(
                                 calculateReconcileTotal(
                                         row.getCostPrice(), row.getQuantity(), row.getShippingFee())));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesRemark()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
         dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
     }
 
     private void writePlatformReconcileSheet(
-            Sheet sheet,
-            List<DailyTableRowDto> rows,
-            ReceiptWritePlan writePlan,
-            int supplyPriceColumnIndex,
-            int totalColumnIndex) {
+            Sheet sheet, List<DailyTableRowDto> rows, ReceiptWritePlan writePlan) {
+        boolean appendAfterSalesRemark =
+                shouldAppendAfterSalesRemarkColumn(rows, writePlan.fieldByColumnIndex());
+        int baseMaxColumnIndex = resolveMaxColumnIndex(writePlan.sortedHeaders());
+        int afterSalesRemarkColumnIndex = appendAfterSalesRemark ? baseMaxColumnIndex + 1 : -1;
+        int supplyPriceColumnIndex =
+                appendAfterSalesRemark ? afterSalesRemarkColumnIndex + 1 : baseMaxColumnIndex + 1;
+        int totalColumnIndex = supplyPriceColumnIndex + 1;
+
         Row headerRow = sheet.createRow(0);
         for (ExcelHeaderDto header : writePlan.sortedHeaders()) {
             headerRow.createCell(header.getColumnIndex()).setCellValue(nullToEmpty(header.getHeaderName()));
+        }
+        if (appendAfterSalesRemark) {
+            headerRow.createCell(afterSalesRemarkColumnIndex).setCellValue(AFTER_SALES_REMARK_HEADER);
         }
         headerRow.createCell(supplyPriceColumnIndex)
                 .setCellValue(PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER);
@@ -393,6 +474,10 @@ public class ExcelWriterService {
                 }
                 Cell cell = dataRow.createCell(header.getColumnIndex());
                 setCellValueFromDailyRow(cell, row, fieldKey);
+            }
+            if (appendAfterSalesRemark) {
+                dataRow.createCell(afterSalesRemarkColumnIndex)
+                        .setCellValue(nullToEmpty(row.getAfterSalesRemark()));
             }
             dataRow.createCell(supplyPriceColumnIndex).setCellValue(formatPriceCell(row.getSupplyPrice()));
             dataRow.createCell(totalColumnIndex)
@@ -455,6 +540,7 @@ public class ExcelWriterService {
             dataRow.createCell(col++)
                     .setCellValue(
                             row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
+            dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesRemark()));
             dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
             dataRow.createCell(col).setCellValue(nullToEmpty(row.getIssueDate()));
         }
@@ -473,10 +559,19 @@ public class ExcelWriterService {
                         .sorted(Comparator.comparingInt(ExcelHeaderDto::getColumnIndex))
                         .toList();
         Map<Integer, OrderFieldKey> fieldByColumnIndex = buildStrictFieldByColumnIndex(mapping);
+        boolean appendAfterSalesRemark =
+                shouldAppendAfterSalesRemarkColumn(rows, fieldByColumnIndex);
+        int afterSalesRemarkColumnIndex = -1;
+        if (appendAfterSalesRemark) {
+            afterSalesRemarkColumnIndex = resolveMaxColumnIndex(sortedHeaders) + 1;
+        }
 
         Row headerRow = sheet.createRow(0);
         for (ExcelHeaderDto header : sortedHeaders) {
             headerRow.createCell(header.getColumnIndex()).setCellValue(nullToEmpty(header.getHeaderName()));
+        }
+        if (appendAfterSalesRemark) {
+            headerRow.createCell(afterSalesRemarkColumnIndex).setCellValue(AFTER_SALES_REMARK_HEADER);
         }
 
         int rowIndex = 1;
@@ -489,6 +584,10 @@ public class ExcelWriterService {
                 }
                 Cell cell = dataRow.createCell(header.getColumnIndex());
                 setCellValueFromDailyRow(cell, row, fieldKey);
+            }
+            if (appendAfterSalesRemark) {
+                dataRow.createCell(afterSalesRemarkColumnIndex)
+                        .setCellValue(nullToEmpty(row.getAfterSalesRemark()));
             }
         }
     }
@@ -681,6 +780,7 @@ public class ExcelWriterService {
                 cell.setCellValue(
                         row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
             case REMARK -> cell.setCellValue(nullToEmpty(row.getRemark()));
+            case AFTER_SALES_REMARK -> cell.setCellValue(nullToEmpty(row.getAfterSalesRemark()));
             case LOGISTICS_NO -> cell.setCellValue(nullToEmpty(row.getLogisticsNo()));
             case LOGISTICS_COMPANY -> cell.setCellValue(nullToEmpty(row.getLogisticsCompany()));
             default -> cell.setCellValue("");
@@ -707,6 +807,8 @@ public class ExcelWriterService {
                 cell.setCellValue(
                         orderRow.getShippingFee() == null ? 0 : orderRow.getShippingFee().doubleValue());
             case REMARK -> cell.setCellValue(nullToEmpty(orderRow.getRemark()));
+            case AFTER_SALES_REMARK ->
+                cell.setCellValue(nullToEmpty(orderRow.getAfterSalesRemark()));
             case LOGISTICS_NO, LOGISTICS_COMPANY -> cell.setCellValue("");
             default -> cell.setCellValue("");
         }
@@ -758,5 +860,36 @@ public class ExcelWriterService {
             return trimmed.substring(0, 10);
         }
         return trimmed;
+    }
+
+    private boolean shouldAppendAfterSalesRemarkColumn(
+            List<DailyTableRowDto> rows, Map<Integer, OrderFieldKey> fieldByColumnIndex) {
+        if (mappingContainsAfterSalesRemark(fieldByColumnIndex)) {
+            return false;
+        }
+        return hasAfterSalesRemarkInRows(rows);
+    }
+
+    private boolean mappingContainsAfterSalesRemark(Map<Integer, OrderFieldKey> fieldByColumnIndex) {
+        return fieldByColumnIndex.containsValue(OrderFieldKey.AFTER_SALES_REMARK);
+    }
+
+    private boolean hasAfterSalesRemarkInRows(List<DailyTableRowDto> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return false;
+        }
+        for (DailyTableRowDto row : rows) {
+            if (hasAfterSalesRemark(row)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasAfterSalesRemark(DailyTableRowDto row) {
+        if (row == null || row.getAfterSalesRemark() == null) {
+            return false;
+        }
+        return !row.getAfterSalesRemark().isBlank();
     }
 }

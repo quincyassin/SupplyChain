@@ -82,7 +82,7 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
             LocalDateTime endExclusive);
 
     /**
-     * 按分单日期区间 + 关键字模糊查询（商家、平台、系统编号、订单编号、收货人、电话）
+     * 按分单日期区间 + 关键字模糊查询（商家、平台、系统编号、物流单号、订单编号）
      */
     @Query(value = """
             SELECT o.* FROM import_order o
@@ -91,10 +91,9 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
               AND (
                 o.merchant LIKE :likePattern ESCAPE '\\\\'
                 OR IFNULL(o.platform, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.receiver, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.phone, '') LIKE :likePattern ESCAPE '\\\\'
                 OR IFNULL(o.system_no, '') LIKE :likePattern ESCAPE '\\\\'
+                OR IFNULL(o.logistics_no, '') LIKE :likePattern ESCAPE '\\\\'
+                OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
               )
             ORDER BY o.platform ASC, o.merchant ASC, o.system_no ASC
             """, nativeQuery = true)

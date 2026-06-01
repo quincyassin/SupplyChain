@@ -45,7 +45,8 @@ public class FieldAliasConfigService {
             OrderFieldKey.SKU,
             OrderFieldKey.QUANTITY,
             OrderFieldKey.SHIPPING_FEE,
-            OrderFieldKey.REMARK
+            OrderFieldKey.REMARK,
+            OrderFieldKey.AFTER_SALES_REMARK
     };
 
     private final FieldAliasConfigRepository fieldAliasConfigRepository;
@@ -190,6 +191,7 @@ public class FieldAliasConfigService {
             case ADDRESS -> List.of("收货地址", "地址");
             case SHIPPING_FEE -> List.of("邮费", "快递费");
             case REMARK -> List.of("买家留言", "卖家备注", "订单备注");
+            case AFTER_SALES_REMARK -> List.of("售后备注", "退货原因", "退款原因");
             case LOGISTICS_NO -> List.of("快递单号", "运单号");
             case LOGISTICS_COMPANY -> List.of("快递公司", "承运商");
             default -> List.of();

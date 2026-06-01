@@ -18,6 +18,7 @@ public enum OrderFieldKey {
   PHONE("phone", "收货人电话", false),
   SHIPPING_FEE("shippingFee", "运费", false),
   REMARK("remark", "备注", false),
+  AFTER_SALES_REMARK("afterSalesRemark", "售后原因", false),
   LOGISTICS_NO("logisticsNo", "物流单号", false),
   LOGISTICS_COMPANY("logisticsCompany", "物流公司", false);
 

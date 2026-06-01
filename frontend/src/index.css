@@ -95,14 +95,6 @@ body {
   gap: 8px;
 }
 
-.after-sales-toolbar {
-  padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
 .after-sales-table-panel {
   flex: 1;
   min-height: 0;

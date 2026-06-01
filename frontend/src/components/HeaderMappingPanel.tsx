@@ -5,7 +5,7 @@ import type {
 } from "../api/orderApi";
 import { UNMAPPED_COLUMN_INDEX, ensureCompleteMapping } from "../api/orderApi";
 import { useTableBodyScrollY } from "../hooks/useTableBodyScrollY";
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Select, Switch, Table, Typography } from "antd";
 
 interface HeaderMappingPanelProps {
@@ -15,9 +15,11 @@ interface HeaderMappingPanelProps {
   onChange: (next: ColumnMappingItem[]) => void;
 }
 
-interface FieldMappingRow extends ColumnMappingItem {
-  label: string;
-  required: boolean;
+interface ExcelColumnMappingRow {
+  columnIndex: number;
+  headerName: string;
+  fieldKey: string | null;
+  enabled: boolean;
 }
 
 /** 表头占用高度 */
@@ -25,68 +27,48 @@ const MAPPING_TABLE_CHROME_HEIGHT = 56;
 
 const PRODUCT_NAME_FIELD_KEY = "productName";
 
-function applyFieldEnabledChange(
+function applyColumnFieldChange(
   mapping: ColumnMappingItem[],
   fields: OrderFieldMeta[],
   excelHeaders: ExcelHeader[],
-  fieldKey: string,
-  enabled: boolean,
-): ColumnMappingItem[] {
-  return ensureCompleteMapping(mapping, fields, excelHeaders).map((item) => {
-    if (item.fieldKey !== fieldKey) {
-      return item;
-    }
-    if (enabled) {
-      return { ...item, enabled: true };
-    }
-    return {
-      ...item,
-      enabled: false,
-      sourceIndex: UNMAPPED_COLUMN_INDEX,
-    };
-  });
-}
-
-function applyFieldSourceChange(
-  mapping: ColumnMappingItem[],
-  fields: OrderFieldMeta[],
-  excelHeaders: ExcelHeader[],
-  fieldKey: string,
-  sourceIndex: number | null,
+  columnIndex: number,
+  fieldKey: string | null,
 ): ColumnMappingItem[] {
   let next = ensureCompleteMapping(mapping, fields, excelHeaders);
-  const normalizedIndex =
-    sourceIndex == null ? UNMAPPED_COLUMN_INDEX : sourceIndex;
 
-  if (normalizedIndex >= 0) {
+  next = next.map((item) =>
+    item.sourceIndex === columnIndex
+      ? {
+          ...item,
+          sourceIndex: UNMAPPED_COLUMN_INDEX,
+          enabled: false,
+        }
+      : item,
+  );
+
+  if (fieldKey) {
     next = next.map((item) =>
-      item.sourceIndex === normalizedIndex && item.fieldKey !== fieldKey
+      item.fieldKey === fieldKey
         ? {
             ...item,
-            sourceIndex: UNMAPPED_COLUMN_INDEX,
-            enabled: false,
+            sourceIndex: columnIndex,
+            enabled: true,
           }
         : item,
     );
   }
 
-  return next.map((item) => {
-    if (item.fieldKey !== fieldKey) {
-      return item;
+  return next;
+}
+
+function collectActiveColumnIndexes(items: ColumnMappingItem[]): Set<number> {
+  const indexes = new Set<number>();
+  for (const item of items) {
+    if (item.enabled && item.sourceIndex >= 0) {
+      indexes.add(item.sourceIndex);
     }
-    if (normalizedIndex < 0) {
-      return {
-        ...item,
-        sourceIndex: UNMAPPED_COLUMN_INDEX,
-        enabled: false,
-      };
-    }
-    return {
-      ...item,
-      sourceIndex: normalizedIndex,
-      enabled: true,
-    };
-  });
+  }
+  return indexes;
 }
 
 export function hasMappedProductName(mapping: ColumnMappingItem[]): boolean {
@@ -110,68 +92,104 @@ export default function HeaderMappingPanel({
     MAPPING_TABLE_CHROME_HEIGHT,
   );
 
-  const rows = useMemo(() => {
-    const completeMapping = ensureCompleteMapping(mapping, fields, excelHeaders);
-    return fields.map((field) => {
-      const item =
-        completeMapping.find((entry) => entry.fieldKey === field.fieldKey) ??
-        ({
-          fieldKey: field.fieldKey,
-          sourceIndex: UNMAPPED_COLUMN_INDEX,
-          enabled: false,
-          sortOrder: 0,
-        } satisfies ColumnMappingItem);
-      return {
-        ...item,
-        label: field.label,
-        required: field.required,
-      } satisfies FieldMappingRow;
-    });
-  }, [mapping, fields, excelHeaders]);
+  const completeMapping = useMemo(
+    () => ensureCompleteMapping(mapping, fields, excelHeaders),
+    [mapping, fields, excelHeaders],
+  );
 
-  const usedColumnIndexes = useMemo(() => {
-    const indexes = new Set<number>();
+  const [activeColumns, setActiveColumns] = useState<Set<number>>(
+    () => new Set(),
+  );
+
+  useEffect(() => {
+    setActiveColumns(collectActiveColumnIndexes(completeMapping));
+  }, [excelHeaders]);
+
+  const rows = useMemo(() => {
+    return excelHeaders.map((header) => {
+      const mapped = completeMapping.find(
+        (item) =>
+          item.enabled && item.sourceIndex === header.columnIndex,
+      );
+      const enabled = activeColumns.has(header.columnIndex);
+      return {
+        columnIndex: header.columnIndex,
+        headerName: header.headerName,
+        fieldKey: enabled && mapped ? mapped.fieldKey : null,
+        enabled,
+      } satisfies ExcelColumnMappingRow;
+    });
+  }, [completeMapping, excelHeaders, activeColumns]);
+
+  const usedFieldKeys = useMemo(() => {
+    const keys = new Set<string>();
     for (const row of rows) {
-      if (row.enabled && row.sourceIndex >= 0) {
-        indexes.add(row.sourceIndex);
+      if (row.enabled && row.fieldKey) {
+        keys.add(row.fieldKey);
       }
     }
-    return indexes;
+    return keys;
   }, [rows]);
 
-  const updateFieldEnabled = (fieldKey: string, enabled: boolean) => {
-    onChange(
-      applyFieldEnabledChange(mapping, fields, excelHeaders, fieldKey, enabled),
-    );
+  const updateColumnEnabled = (columnIndex: number, enabled: boolean) => {
+    setActiveColumns((prev) => {
+      const next = new Set(prev);
+      if (enabled) {
+        next.add(columnIndex);
+      } else {
+        next.delete(columnIndex);
+      }
+      return next;
+    });
+    if (!enabled) {
+      onChange(
+        applyColumnFieldChange(
+          mapping,
+          fields,
+          excelHeaders,
+          columnIndex,
+          null,
+        ),
+      );
+    }
   };
 
-  const updateFieldSource = (fieldKey: string, sourceIndex: number | null) => {
+  const updateColumnField = (columnIndex: number, fieldKey: string | null) => {
+    if (fieldKey) {
+      setActiveColumns((prev) => new Set(prev).add(columnIndex));
+    }
     onChange(
-      applyFieldSourceChange(mapping, fields, excelHeaders, fieldKey, sourceIndex),
+      applyColumnFieldChange(
+        mapping,
+        fields,
+        excelHeaders,
+        columnIndex,
+        fieldKey,
+      ),
     );
   };
 
   return (
     <div className="header-mapping-table-area">
       <Typography.Paragraph type="secondary" className="config-panel-intro">
-        请为各系统字段勾选启用并选择对应 Excel 列；「商品名称」必须映射到某一列，其余字段可选。
+        左侧为模板 Excel 列，勾选启用后选择对应系统字段；「商品名称」必须映射到某一列，其余字段可选。
       </Typography.Paragraph>
       <div className="table-scroll-viewport" ref={tableAreaRef}>
-        <Table<FieldMappingRow>
-          rowKey="fieldKey"
+        <Table<ExcelColumnMappingRow>
+          rowKey="columnIndex"
           size="small"
           pagination={false}
           scroll={{ x: 520, y: tableScrollY }}
           dataSource={rows}
           columns={[
             {
-              title: "系统字段",
-              dataIndex: "label",
-              width: 160,
+              title: "Excel 列",
+              dataIndex: "headerName",
+              width: 220,
               ellipsis: true,
-              render: (label: string, record) => (
-                <Typography.Text ellipsis={{ tooltip: label }}>
-                  {record.required ? `${label}（必选）` : label}
+              render: (headerName: string) => (
+                <Typography.Text ellipsis={{ tooltip: headerName }}>
+                  {headerName}
                 </Typography.Text>
               ),
             },
@@ -183,36 +201,37 @@ export default function HeaderMappingPanel({
               render: (_, record) => (
                 <Switch
                   size="small"
-                  checked={record.required ? record.enabled || record.sourceIndex >= 0 : record.enabled}
-                  disabled={record.required}
-                  onChange={(checked) => updateFieldEnabled(record.fieldKey, checked)}
+                  checked={record.enabled}
+                  onChange={(checked) =>
+                    updateColumnEnabled(record.columnIndex, checked)
+                  }
                 />
               ),
             },
             {
-              title: "Excel 列",
-              key: "sourceIndex",
+              title: "系统字段",
+              key: "fieldKey",
               render: (_, record) => {
-                const columnOptions = excelHeaders.map((header) => ({
-                  label: header.headerName,
-                  value: header.columnIndex,
+                const fieldOptions = fields.map((field) => ({
+                  label: field.required ? `${field.label}（必选）` : field.label,
+                  value: field.fieldKey,
                   disabled:
-                    usedColumnIndexes.has(header.columnIndex) &&
-                    header.columnIndex !== record.sourceIndex,
+                    record.enabled &&
+                    usedFieldKeys.has(field.fieldKey) &&
+                    field.fieldKey !== record.fieldKey,
                 }));
-                const selectEnabled = record.required || record.enabled;
                 return (
                   <Select
                     style={{ width: "100%" }}
                     allowClear
-                    placeholder="未选择"
-                    disabled={!selectEnabled}
-                    value={record.sourceIndex >= 0 ? record.sourceIndex : undefined}
-                    options={columnOptions}
+                    placeholder="未映射"
+                    disabled={!record.enabled}
+                    value={record.fieldKey ?? undefined}
+                    options={fieldOptions}
                     onChange={(value) =>
-                      updateFieldSource(
-                        record.fieldKey,
-                        value == null ? null : Number(value),
+                      updateColumnField(
+                        record.columnIndex,
+                        value == null ? null : String(value),
                       )
                     }
                   />

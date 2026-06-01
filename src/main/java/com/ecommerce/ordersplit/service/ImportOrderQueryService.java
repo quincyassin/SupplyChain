@@ -361,6 +361,10 @@ public class ImportOrderQueryService {
         }
     }
 
+    public String normalizeSearchKeyword(String keyword) {
+        return normalizeKeyword(keyword);
+    }
+
     private String normalizeKeyword(String keyword) {
         if (keyword == null) {
             return "";

@@ -31,6 +31,8 @@ public class OrderRow {
   private BigDecimal shippingFee;
   /** 备注 */
   private String remark;
+  /** 售后原因（Excel 导入映射） */
+  private String afterSalesRemark;
   /** 原始 Excel 行号，便于追溯 */
   private int sourceRowNum;
   /** 系统编号（持久化订单匹配用） */

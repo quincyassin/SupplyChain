@@ -50,7 +50,7 @@ class ReceiptBatchParserTest {
 
         assertEquals(1, lines.size());
         assertEquals(SAMPLE_SNOWFLAKE, lines.get(0).systemNo());
-        assertEquals("YT9876543210987", lines.get(0).logisticsNo());
+        assertEquals("运单YT9876543210987", lines.get(0).logisticsNo());
         assertEquals("圆通速递", lines.get(0).logisticsCompany());
     }
 
@@ -80,6 +80,50 @@ class ReceiptBatchParserTest {
 
         assertEquals(1, lines.size());
         assertEquals(SAMPLE_NANO_ID, lines.get(0).systemNo());
+    }
+
+    @Test
+    void parse_shouldSupportMultipleLogisticsNosWithHyphen() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632 韵达 YD-222828282828，YD-2222222222");
+
+        assertEquals(1, lines.size());
+        assertEquals("5205061632", lines.get(0).systemNo());
+        assertEquals("YD-222828282828,YD-2222222222", lines.get(0).logisticsNo());
+        assertEquals("韵达", lines.get(0).logisticsCompany());
+    }
+
+    @Test
+    void parse_shouldSupportMultipleLogisticsNosWithTabSeparator() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632\t韵达\tYD-222828282828,YD-2222222222");
+
+        assertEquals(1, lines.size());
+        assertEquals("YD-222828282828,YD-2222222222", lines.get(0).logisticsNo());
+    }
+
+    @Test
+    void parse_shouldSupportCompanyAbbreviationAndMultipleSameLogisticsNos() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632 YD YD-5205061632,YD-5205061632");
+
+        assertEquals(1, lines.size());
+        assertEquals("5205061632", lines.get(0).systemNo());
+        assertEquals("韵达", lines.get(0).logisticsCompany());
+        assertEquals("YD-5205061632,YD-5205061632", lines.get(0).logisticsNo());
+    }
+
+    @Test
+    void parse_shouldAcceptArbitraryLogisticsNoFormats() {
+        var lines =
+                ReceiptBatchParser.parse(
+                        "5205061632 韵达 abc,123,测试单号A");
+
+        assertEquals(1, lines.size());
+        assertEquals("abc,123,测试单号A", lines.get(0).logisticsNo());
     }
 
     @Test

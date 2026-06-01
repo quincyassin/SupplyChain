@@ -4,8 +4,10 @@ import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.util.SystemNoGenerator;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -27,9 +29,25 @@ public final class ReceiptBatchParser {
                     Pattern.CASE_INSENSITIVE);
     private static final Pattern LEGACY_SYSTEM_NO_PATTERN =
             Pattern.compile("SYS-\\d{8}-\\d{6}-\\d{2}", Pattern.CASE_INSENSITIVE);
-    private static final Pattern LOGISTICS_NO_EMBEDDED_PATTERN = Pattern
-            .compile("(?i)(?:SF|YT|ZTO|YD|STO|JT|JD|DB|EMS)\\d{8,}");
     private static final Pattern COMPANY_SUFFIX_PATTERN = Pattern.compile("[\\u4e00-\\u9fa5]{2,20}(?:快递|速递|物流)");
+    private static final int MAX_LOGISTICS_NO_LENGTH = 128;
+
+    /** 物流公司英文缩写（独立出现时识别，不破坏 YD-xxx 运单号） */
+    private static final Map<String, String> LOGISTICS_COMPANY_ABBREVIATIONS = buildCompanyAbbreviations();
+
+    private static Map<String, String> buildCompanyAbbreviations() {
+        Map<String, String> map = new LinkedHashMap<>();
+        map.put("SF", "顺丰");
+        map.put("YT", "圆通");
+        map.put("ZTO", "中通");
+        map.put("YD", "韵达");
+        map.put("STO", "申通");
+        map.put("JT", "极兔");
+        map.put("JD", "京东");
+        map.put("DB", "德邦");
+        map.put("EMS", "EMS");
+        return Map.copyOf(map);
+    }
 
     private static final List<String> KNOWN_LOGISTICS_COMPANIES = List.of(
             "顺丰速运",
@@ -110,40 +128,26 @@ public final class ReceiptBatchParser {
 
     private static ReceiptLine tryParseFromTokens(List<String> tokens) {
         String systemNo = null;
-        String logisticsNo = null;
         String logisticsCompany = null;
+        List<String> logisticsNumbers = new ArrayList<>();
 
         for (String token : tokens) {
-            FieldType type = classifyToken(token);
-            if (type == FieldType.UNKNOWN && systemNo == null) {
-                String embedded = findEmbeddedSystemNo(token);
-                if (embedded != null) {
-                    systemNo = embedded;
-                    continue;
-                }
+            String value = token.trim();
+            if (value.isEmpty()) {
+                continue;
             }
-            switch (type) {
-                case SYSTEM_NO -> {
-                    if (systemNo == null) {
-                        systemNo = SystemNoGenerator.normalize(token);
-                    }
-                }
-                case LOGISTICS_NO -> {
-                    if (logisticsNo == null) {
-                        logisticsNo = token.trim();
-                    }
-                }
-                case COMPANY -> {
-                    if (logisticsCompany == null) {
-                        logisticsCompany = matchCompany(token).orElse(token.trim());
-                    }
-                }
-                default -> {
-                    // 忽略无法识别的片段
-                }
+            if (systemNo == null && SystemNoGenerator.isSystemNoFormat(value)) {
+                systemNo = SystemNoGenerator.normalize(value);
+                continue;
             }
+            if (logisticsCompany == null && isKnownCompanyToken(value)) {
+                logisticsCompany = resolveCompanyName(value);
+                continue;
+            }
+            appendLogisticsToken(value, logisticsNumbers, systemNo);
         }
 
+        String logisticsNo = joinLogisticsNos(logisticsNumbers);
         if (isFilled(systemNo, logisticsNo, logisticsCompany)) {
             return new ReceiptLine(systemNo, logisticsNo, logisticsCompany);
         }
@@ -172,63 +176,34 @@ public final class ReceiptBatchParser {
     }
 
     private static List<String> tokenize(String line) {
-        String[] raw = line.split("[\\t,，;；|]+");
-        if (raw.length < 2) {
-            raw = line.split("\\s+");
-        }
         List<String> tokens = new ArrayList<>();
-        for (String part : raw) {
-            String trimmed = part.trim();
-            if (!trimmed.isEmpty()) {
-                tokens.add(trimmed);
+        if (line.contains("\t")) {
+            for (String part : line.split("\\t")) {
+                addTrimmedToken(tokens, part);
             }
+            return tokens;
+        }
+        String[] byComma = line.split("[,，]");
+        if (byComma.length == 3 && !line.contains(" ") && !line.contains("\t")) {
+            for (String part : byComma) {
+                addTrimmedToken(tokens, part);
+            }
+            return tokens;
+        }
+        for (String part : line.split("\\s+")) {
+            addTrimmedToken(tokens, part);
         }
         return tokens;
     }
 
-    private enum FieldType {
-        SYSTEM_NO,
-        LOGISTICS_NO,
-        COMPANY,
-        UNKNOWN
-    }
-
-    private static FieldType classifyToken(String token) {
-        String value = token.trim();
-        if (value.isEmpty()) {
-            return FieldType.UNKNOWN;
+    private static void addTrimmedToken(List<String> tokens, String part) {
+        if (part == null) {
+            return;
         }
-        if (SystemNoGenerator.isSystemNoFormat(value)) {
-            return FieldType.SYSTEM_NO;
+        String trimmed = part.trim();
+        if (!trimmed.isEmpty()) {
+            tokens.add(trimmed);
         }
-        if (matchCompany(value).isPresent()) {
-            return FieldType.COMPANY;
-        }
-        if (COMPANY_SUFFIX_PATTERN.matcher(value).matches()) {
-            return FieldType.COMPANY;
-        }
-        if (isLogisticsNo(value)) {
-            return FieldType.LOGISTICS_NO;
-        }
-        if (containsChinese(value) && value.length() <= 20) {
-            return FieldType.COMPANY;
-        }
-        return FieldType.UNKNOWN;
-    }
-
-    private static String findEmbeddedSystemNo(String text) {
-        if (text == null || text.isBlank()) {
-            return null;
-        }
-        Matcher snowflakeMatcher = SNOWFLAKE_SYSTEM_NO_PATTERN.matcher(text);
-        if (snowflakeMatcher.find()) {
-            return SystemNoGenerator.normalize(snowflakeMatcher.group());
-        }
-        Matcher matcher = NANO_ID_SYSTEM_NO_PATTERN.matcher(text);
-        if (matcher.find()) {
-            return SystemNoGenerator.normalize(matcher.group());
-        }
-        return null;
     }
 
     private static String findSystemNo(String line) {
@@ -269,71 +244,159 @@ public final class ReceiptBatchParser {
             if (SystemNoGenerator.isSystemNoFormat(token)) {
                 continue;
             }
-            if (containsChinese(token) && token.length() <= 20) {
+            Optional<String> abbreviation = resolveCompanyAbbreviation(token);
+            if (abbreviation.isPresent()) {
+                return abbreviation.get();
+            }
+            if (isKnownCompanyToken(token)) {
+                return matchCompany(token).orElse(token);
+            }
+            if (isChineseOnlyCompanyName(token)) {
                 return token;
             }
         }
         return null;
+    }
+
+    private static String removeStandaloneToken(String line, String token) {
+        if (line == null || token == null || token.isBlank()) {
+            return line;
+        }
+        Pattern pattern =
+                Pattern.compile(
+                        "(?<![A-Za-z0-9-])" + Pattern.quote(token) + "(?![A-Za-z0-9-])",
+                        Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
+        return pattern.matcher(line).replaceAll(" ");
+    }
+
+    private static String removeStandaloneSystemNo(String line, String systemNo) {
+        if (line == null || systemNo == null || systemNo.isBlank()) {
+            return line;
+        }
+        Pattern pattern =
+                Pattern.compile(
+                        "(?<![A-Za-z0-9-])" + Pattern.quote(systemNo) + "(?![0-9])",
+                        Pattern.CASE_INSENSITIVE);
+        return pattern.matcher(line).replaceAll(" ");
+    }
+
+    private static Optional<String> resolveCompanyAbbreviation(String token) {
+        if (token == null || token.isBlank()) {
+            return Optional.empty();
+        }
+        String normalized = token.trim().toUpperCase(Locale.ROOT);
+        String company = LOGISTICS_COMPANY_ABBREVIATIONS.get(normalized);
+        return company == null ? Optional.empty() : Optional.of(company);
+    }
+
+    private static String resolveCompanyName(String token) {
+        return resolveCompanyAbbreviation(token).orElseGet(() -> matchCompany(token).orElse(token.trim()));
     }
 
     private static String findLogisticsNo(String line, String systemNo, String logisticsCompany) {
         String remainder = line;
         if (systemNo != null) {
-            remainder = remainder.replace(systemNo, " ");
-            remainder = remainder.replace(systemNo.toLowerCase(Locale.ROOT), " ");
+            remainder = removeStandaloneSystemNo(remainder, systemNo);
+            remainder = removeStandaloneSystemNo(remainder, systemNo.toLowerCase(Locale.ROOT));
         }
         if (logisticsCompany != null) {
-            remainder = remainder.replace(logisticsCompany, " ");
+            remainder = removeStandaloneToken(remainder, logisticsCompany);
         }
-
-        Matcher embeddedMatcher = LOGISTICS_NO_EMBEDDED_PATTERN.matcher(remainder);
-        if (embeddedMatcher.find()) {
-            return embeddedMatcher.group();
-        }
-
-        Matcher matcher = Pattern.compile("(?i)[A-Za-z]{2,6}\\d{8,}").matcher(remainder);
-        String best = null;
-        while (matcher.find()) {
-            String candidate = matcher.group();
-            if (isLogisticsNo(candidate) && !candidate.equalsIgnoreCase(systemNo)) {
-                if (best == null || candidate.length() > best.length()) {
-                    best = candidate;
-                }
+        for (Map.Entry<String, String> entry : LOGISTICS_COMPANY_ABBREVIATIONS.entrySet()) {
+            if (entry.getValue().equals(logisticsCompany)) {
+                remainder = removeStandaloneToken(remainder, entry.getKey());
             }
         }
-        if (best != null) {
-            return best;
-        }
 
-        for (String token : tokenize(remainder)) {
-            if (isLogisticsNo(token) && !token.equalsIgnoreCase(systemNo)) {
-                return token;
-            }
+        List<String> logisticsNumbers = new ArrayList<>();
+        String normalizedRemainder = remainder == null ? "" : remainder.trim();
+        if (normalizedRemainder.isEmpty()) {
+            return null;
         }
-        return null;
+        appendLogisticsToken(normalizedRemainder, logisticsNumbers, systemNo);
+        return joinLogisticsNos(logisticsNumbers);
     }
 
-    private static boolean isLogisticsNo(String value) {
+    private static void appendLogisticsToken(
+            String token, List<String> logisticsNumbers, String systemNo) {
+        if (token == null || token.isBlank()) {
+            return;
+        }
+        if (token.contains(",") || token.contains("，")) {
+            for (String part : token.split("[,，]")) {
+                addLogisticsNo(logisticsNumbers, part, systemNo);
+            }
+            return;
+        }
+        for (String part : token.split("\\s+")) {
+            addLogisticsNo(logisticsNumbers, part, systemNo);
+        }
+    }
+
+    private static void addLogisticsNo(
+            List<String> logisticsNumbers, String candidate, String systemNo) {
+        if (!isLogisticsCandidate(candidate, systemNo)) {
+            return;
+        }
+        logisticsNumbers.add(candidate.trim());
+    }
+
+    private static String joinLogisticsNos(List<String> logisticsNumbers) {
+        if (logisticsNumbers == null || logisticsNumbers.isEmpty()) {
+            return null;
+        }
+        return String.join(",", logisticsNumbers);
+    }
+
+    private static boolean isLogisticsCandidate(String value, String systemNo) {
+        if (value == null || value.isBlank()) {
+            return false;
+        }
         String trimmed = value.trim();
-        if (trimmed.length() < 8 || trimmed.length() > 32) {
+        if (trimmed.length() > MAX_LOGISTICS_NO_LENGTH) {
+            return false;
+        }
+        if (systemNo != null && trimmed.equalsIgnoreCase(systemNo)) {
             return false;
         }
         if (SystemNoGenerator.isSystemNoFormat(trimmed)) {
             return false;
         }
-        if (matchCompany(trimmed).isPresent()) {
+        if (isChineseOnlyCompanyName(trimmed)) {
             return false;
         }
-        if (containsChinese(trimmed)) {
+        return !isKnownCompanyToken(trimmed);
+    }
+
+    private static boolean isKnownCompanyToken(String token) {
+        String value = token.trim();
+        if (value.isEmpty()) {
             return false;
         }
-        return trimmed.matches("[A-Za-z0-9]+");
+        if (resolveCompanyAbbreviation(value).isPresent()) {
+            return true;
+        }
+        if (matchCompany(value).isPresent()) {
+            return true;
+        }
+        return COMPANY_SUFFIX_PATTERN.matcher(value).matches();
+    }
+
+    private static boolean isChineseOnlyCompanyName(String token) {
+        String value = token.trim();
+        return containsChinese(value)
+                && !value.matches(".*[A-Za-z0-9].*")
+                && value.length() <= 20;
     }
 
     private static Optional<String> matchCompany(String text) {
         String source = text.trim();
         if (source.isEmpty()) {
             return Optional.empty();
+        }
+        Optional<String> abbreviation = resolveCompanyAbbreviation(source);
+        if (abbreviation.isPresent()) {
+            return abbreviation;
         }
         return KNOWN_LOGISTICS_COMPANIES.stream()
                 .filter(source::contains)
