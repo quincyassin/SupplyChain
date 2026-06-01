@@ -3,19 +3,21 @@ import { Alert, Layout, Menu, Spin, Typography } from "antd";
 import {
   AccountBookOutlined,
   CustomerServiceOutlined,
+  DollarOutlined,
   HomeOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import OrderPage from "./pages/OrderPage";
 import AfterSalesPage from "./pages/AfterSalesPage";
 import ReconcilePage from "./pages/ReconcilePage";
+import ProductPricePage from "./pages/ProductPricePage";
 import ConfigPage from "./pages/ConfigPage";
 import { fetchLicenseStatus, type LicenseStatus } from "./api/licenseApi";
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
 
-type AppMenuKey = "orders" | "reconcile" | "after-sales" | "config";
+type AppMenuKey = "orders" | "reconcile" | "after-sales" | "product-prices" | "config";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<AppMenuKey>("orders");
@@ -75,6 +77,11 @@ export default function App() {
               icon: <CustomerServiceOutlined />,
               label: "售后",
             },
+            {
+              key: "product-prices",
+              icon: <DollarOutlined />,
+              label: "商品价格维护",
+            },
             { key: "config", icon: <SettingOutlined />, label: "系统配置" },
           ]}
           onClick={({ key }) => setActiveMenu(key as AppMenuKey)}
@@ -99,6 +106,7 @@ export default function App() {
         {activeMenu === "orders" && <OrderPage />}
         {activeMenu === "reconcile" && <ReconcilePage />}
         {activeMenu === "after-sales" && <AfterSalesPage />}
+        {activeMenu === "product-prices" && <ProductPricePage />}
         {activeMenu === "config" && (
           <ConfigPage
             initialKey={needActivate ? "license" : undefined}

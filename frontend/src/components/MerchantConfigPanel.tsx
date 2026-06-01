@@ -29,9 +29,6 @@ interface MerchantFormValues {
   keywordsText: string;
 }
 
-/** 表头 + 分页占用高度 */
-const MERCHANT_TABLE_CHROME_HEIGHT = 108;
-
 function parseKeywordsText(text: string): string[] {
   const parts = text.split(/[\n,，]/);
   const result: string[] = [];
@@ -73,10 +70,9 @@ export default function MerchantConfigPanel() {
   const [pageSize, setPageSize] = useState(20);
   const formRef = useRef<FormInstance<MerchantFormValues>>(null);
   const tableAreaRef = useRef<HTMLDivElement>(null);
-  const tableScrollY = useTableBodyScrollY(
-    tableAreaRef,
-    MERCHANT_TABLE_CHROME_HEIGHT,
-  );
+  const tableScrollY = useTableBodyScrollY(tableAreaRef, {
+    enabled: !loading,
+  });
 
   const reload = useCallback(async () => {
     const list = await fetchMerchantConfigs();

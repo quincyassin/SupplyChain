@@ -52,7 +52,7 @@ public class ImportOrderPagedQueryService {
         StringBuilder sql = new StringBuilder("SELECT o.* FROM import_order o WHERE 1=1");
         Map<String, Object> params = new HashMap<>();
         appendFilters(sql, params, filter);
-        sql.append(" ORDER BY o.platform ASC, o.merchant ASC, o.system_no ASC");
+        sql.append(" ORDER BY o.created_at DESC, o.system_no DESC");
 
         Query query = entityManager.createNativeQuery(sql.toString(), ImportOrder.class);
         bindParams(query, params);

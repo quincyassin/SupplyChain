@@ -13,6 +13,7 @@ body {
 
 #root {
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -32,13 +33,21 @@ body {
 
 .app-layout {
   height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   background: #eef1f6;
   overflow: hidden;
 }
 
+.app-layout > .ant-layout-header {
+  flex: 0 0 auto;
+}
+
 .app-layout > .ant-layout-content {
-  min-width: 0;
+  flex: 1 1 0%;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
@@ -75,7 +84,7 @@ body {
   max-width: none;
   margin: 0;
   padding: 10px 12px 12px;
-  height: calc(100vh - 48px);
+  flex: 1 1 0%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -88,7 +97,7 @@ body {
 }
 
 .after-sales-page {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   display: flex;
   flex-direction: column;
@@ -96,13 +105,15 @@ body {
 }
 
 .after-sales-table-panel {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   background: #fff;
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .after-sales-table-panel .ant-table-thead > tr > th {
@@ -203,7 +214,7 @@ body {
 }
 
 .config-panel-table-area {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -332,7 +343,7 @@ body {
 }
 
 .order-workspace {
-  flex: 1;
+  flex: 1 1 0%;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -341,7 +352,7 @@ body {
 }
 
 .order-main-layout {
-  flex: 1;
+  flex: 1 1 0%;
   display: flex;
   gap: 8px;
   min-height: 0;
@@ -351,7 +362,7 @@ body {
 }
 
 .order-main-content {
-  flex: 1;
+  flex: 1 1 0%;
   min-width: 0;
   min-height: 0;
   display: flex;
@@ -503,7 +514,7 @@ body {
 }
 
 .table-panel {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   width: 100%;
@@ -530,7 +541,7 @@ body {
 }
 
 .table-panel-body {
-  flex: 1;
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -571,8 +582,9 @@ body {
   margin-bottom: 4px;
 }
 
-.table-panel-body > .table-scroll-viewport {
-  flex: 1;
+.table-panel-body > .table-scroll-viewport,
+.after-sales-table-panel > .table-scroll-viewport {
+  flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
 }
@@ -622,7 +634,8 @@ body {
 }
 
 .table-scroll-viewport {
-  flex: 1;
+  flex: 1 1 0%;
+  align-self: stretch;
   width: 100%;
   max-width: 100%;
   min-width: 0;
@@ -630,42 +643,22 @@ body {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  --table-pagination-gap: 8px;
+}
+
+.table-scroll-viewport .ant-table-wrapper,
+.table-scroll-viewport .ant-spin-nested-loading,
+.table-scroll-viewport .ant-spin-container {
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .table-scroll-viewport .ant-table-wrapper {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-scroll-viewport .ant-spin-nested-loading,
-.table-scroll-viewport .ant-spin-container {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-scroll-viewport .ant-table {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-scroll-viewport .ant-table-container {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.table-scroll-viewport .ant-table-content {
-  overflow: hidden !important;
+  height: auto;
+  box-sizing: border-box;
 }
 
 .table-scroll-viewport .ant-table-body {
@@ -763,7 +756,14 @@ body {
 
 .table-scroll-viewport .ant-table-pagination {
   flex-shrink: 0;
-  margin: 8px 0 0 !important;
+  margin: var(--table-pagination-gap) 0 0 !important;
+  padding: 0 !important;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.table-scroll-viewport .ant-table-pagination .ant-pagination {
+  margin: 0 !important;
 }
 
 .table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) {

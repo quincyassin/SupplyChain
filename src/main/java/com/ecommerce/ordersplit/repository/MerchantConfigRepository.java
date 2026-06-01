@@ -20,8 +20,8 @@ public interface MerchantConfigRepository extends JpaRepository<MerchantConfig, 
   /** 分单匹配：包含展示与隐藏商家 */
   List<MerchantConfig> findAllByOrderByNameAsc();
 
-  /** 配置页列表：仅展示 VISIBLE */
-  List<MerchantConfig> findAllByVisibilityOrderByIdDesc(MerchantConfigVisibility visibility);
+  /** 配置页列表：仅展示 VISIBLE，按更新时间倒序 */
+  List<MerchantConfig> findAllByVisibilityOrderByUpdatedAtDesc(MerchantConfigVisibility visibility);
 
   long countByVisibility(MerchantConfigVisibility visibility);
 }

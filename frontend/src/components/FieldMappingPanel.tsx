@@ -24,9 +24,6 @@ interface AliasFormValues {
   aliasesText: string;
 }
 
-/** 表头 + 分页占用高度 */
-const FIELD_ALIAS_TABLE_CHROME_HEIGHT = 108;
-
 function parseAliasesText(text: string): string[] {
   const parts = text.split(/[\n,，]/);
   const result: string[] = [];
@@ -65,10 +62,9 @@ export default function FieldMappingPanel() {
   const [editing, setEditing] = useState<FieldAliasConfigItem | null>(null);
   const formRef = useRef<FormInstance<AliasFormValues>>(null);
   const tableAreaRef = useRef<HTMLDivElement>(null);
-  const tableScrollY = useTableBodyScrollY(
-    tableAreaRef,
-    FIELD_ALIAS_TABLE_CHROME_HEIGHT,
-  );
+  const tableScrollY = useTableBodyScrollY(tableAreaRef, {
+    enabled: !loading,
+  });
 
   const reload = useCallback(async () => {
     const list = await fetchFieldAliasConfigs();

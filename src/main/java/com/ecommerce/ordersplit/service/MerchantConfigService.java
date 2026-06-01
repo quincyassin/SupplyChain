@@ -35,7 +35,7 @@ public class MerchantConfigService {
   @Transactional(readOnly = true)
   public List<MerchantConfigDto> listAll() {
     return merchantConfigRepository
-        .findAllByVisibilityOrderByIdDesc(MerchantConfigVisibility.VISIBLE)
+        .findAllByVisibilityOrderByUpdatedAtDesc(MerchantConfigVisibility.VISIBLE)
         .stream()
         .map(this::toDto)
         .toList();

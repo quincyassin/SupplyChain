@@ -1,12 +1,10 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.entity.ImportOrder;
-import com.ecommerce.ordersplit.entity.ProductCostPrice;
-import com.ecommerce.ordersplit.entity.ProductSupplyPrice;
+import com.ecommerce.ordersplit.entity.ProductPrice;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
-import com.ecommerce.ordersplit.repository.ProductCostPriceRepository;
-import com.ecommerce.ordersplit.repository.ProductSupplyPriceRepository;
+import com.ecommerce.ordersplit.repository.ProductPriceRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Collection;
@@ -21,7 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 商品成本价 / 供货价维护与订单同步
+ * 商品价格维护与订单同步
  *
  * @author huangxinsong
  */
@@ -31,13 +29,9 @@ public class ProductPriceService {
 
     private static final String KEY_SEPARATOR = "\u0001";
 
-    private final ProductCostPriceRepository productCostPriceRepository;
-    private final ProductSupplyPriceRepository productSupplyPriceRepository;
+    private final ProductPriceRepository productPriceRepository;
     private final ImportOrderRepository importOrderRepository;
 
-    /**
-     * 导入批量查价索引（一次查询成本价 / 供货价配置表）
-     */
     public record ImportPriceLookup(
             Map<String, BigDecimal> costByProductSpec,
             Map<String, BigDecimal> supplyByProductSpecPlatform) {
@@ -47,9 +41,6 @@ public class ProductPriceService {
         }
     }
 
-    /**
-     * 为批量导入构建查价索引
-     */
     @Transactional(readOnly = true)
     public ImportPriceLookup buildLookupForImport(Collection<ImportOrder> orders) {
         if (orders == null || orders.isEmpty()) {
@@ -66,30 +57,24 @@ public class ProductPriceService {
             return ImportPriceLookup.empty();
         }
 
-        List<ProductCostPrice> costRows =
-                productCostPriceRepository.findByProductNameIn(productNames);
-        List<ProductSupplyPrice> supplyRows =
-                productSupplyPriceRepository.findByProductNameIn(productNames);
-
+        List<ProductPrice> rows = productPriceRepository.findByProductNameIn(productNames);
         Map<String, BigDecimal> costMap = new HashMap<>();
-        for (ProductCostPrice row : costRows) {
-            costMap.put(
-                    productSpecKey(row.getProductName(), row.getSpec()), row.getCostPrice());
-        }
-
         Map<String, BigDecimal> supplyMap = new HashMap<>();
-        for (ProductSupplyPrice row : supplyRows) {
-            supplyMap.put(
-                    productSpecPlatformKey(
-                            row.getProductName(), row.getSpec(), row.getPlatform()),
-                    row.getSupplyPrice());
+        for (ProductPrice row : rows) {
+            if (row.getCostPrice() != null) {
+                costMap.putIfAbsent(
+                        productSpecKey(row.getProductName(), row.getSpec()), row.getCostPrice());
+            }
+            if (row.getSupplyPrice() != null) {
+                supplyMap.put(
+                        productSpecPlatformKey(
+                                row.getProductName(), row.getSpec(), row.getPlatform()),
+                        row.getSupplyPrice());
+            }
         }
         return new ImportPriceLookup(costMap, supplyMap);
     }
 
-    /**
-     * 从配置表回填订单价格（导入时使用）
-     */
     @Transactional(readOnly = true)
     public void applyConfiguredPrices(ImportOrder order) {
         if (order == null) {
@@ -106,9 +91,6 @@ public class ProductPriceService {
         resolveSupplyPrice(productName, spec, platform).ifPresent(order::setSupplyPrice);
     }
 
-    /**
-     * 使用批量查价索引回填订单价格（导入批量写入时使用）
-     */
     public void applyConfiguredPrices(ImportOrder order, ImportPriceLookup lookup) {
         if (order == null || lookup == null) {
             return;
@@ -132,21 +114,16 @@ public class ProductPriceService {
         }
     }
 
-    /**
-     * 维护成本价并同步所有相同「商品名称 + 规格」的订单
-     */
     @Transactional
     public int saveCostPriceAndPropagate(ImportOrder sourceOrder, BigDecimal costPrice) {
         ProductKey key = requireProductKey(sourceOrder);
-        BigDecimal normalizedPrice = normalizePrice(costPrice, "成本价");
-        upsertCostPrice(key.productName(), key.spec(), normalizedPrice);
-        return importOrderRepository.updateCostPriceByProductKey(
-                key.productName(), key.spec(), normalizedPrice);
+        String platform = normalizePlatform(sourceOrder.getPlatform());
+        if (platform.isEmpty()) {
+            throw new BusinessException("订单缺少平台信息，无法维护成本价");
+        }
+        return saveCostPriceByKey(key.productName(), key.spec(), platform, costPrice);
     }
 
-    /**
-     * 维护供货价并同步所有相同「商品名称 + 规格 + 平台」的订单
-     */
     @Transactional
     public int saveSupplyPriceAndPropagate(ImportOrder sourceOrder, BigDecimal supplyPrice) {
         ProductKey key = requireProductKey(sourceOrder);
@@ -154,32 +131,121 @@ public class ProductPriceService {
         if (platform.isEmpty()) {
             throw new BusinessException("订单缺少平台信息，无法维护供货价");
         }
+        return saveSupplyPriceByKey(key.productName(), key.spec(), platform, supplyPrice);
+    }
+
+    @Transactional
+    public int saveCostPriceByKey(
+            String productName, String spec, String platform, BigDecimal costPrice) {
+        String normalizedProductName = normalizeProductName(productName);
+        if (normalizedProductName.isEmpty()) {
+            throw new BusinessException("商品名称不能为空");
+        }
+        String normalizedSpec = normalizeSpec(spec);
+        String normalizedPlatform = normalizePlatform(platform);
+        BigDecimal normalizedPrice = normalizePrice(costPrice, "成本价");
+        upsertPrice(normalizedPlatform, normalizedProductName, normalizedSpec, normalizedPrice, null);
+        productPriceRepository.updateCostPriceByProductKey(
+                normalizedProductName, normalizedSpec, normalizedPrice);
+        return importOrderRepository.updateCostPriceByProductKey(
+                normalizedProductName, normalizedSpec, normalizedPrice);
+    }
+
+    @Transactional
+    public int saveSupplyPriceByKey(
+            String productName, String spec, String platform, BigDecimal supplyPrice) {
+        String normalizedProductName = normalizeProductName(productName);
+        if (normalizedProductName.isEmpty()) {
+            throw new BusinessException("商品名称不能为空");
+        }
+        String normalizedSpec = normalizeSpec(spec);
+        String normalizedPlatform = normalizePlatform(platform);
         BigDecimal normalizedPrice = normalizePrice(supplyPrice, "供货价");
-        upsertSupplyPrice(key.productName(), key.spec(), platform, normalizedPrice);
+        upsertPrice(normalizedPlatform, normalizedProductName, normalizedSpec, null, normalizedPrice);
         return importOrderRepository.updateSupplyPriceByProductPlatformKey(
-                key.productName(), key.spec(), platform, normalizedPrice);
+                normalizedProductName, normalizedSpec, normalizedPlatform, normalizedPrice);
+    }
+
+    @Transactional
+    public ProductPriceSaveResult saveMaintenancePrices(
+            String productName,
+            String spec,
+            String platform,
+            BigDecimal costPrice,
+            BigDecimal supplyPrice) {
+        if (costPrice == null && supplyPrice == null) {
+            throw new BusinessException("请至少填写成本价或供货价");
+        }
+        String normalizedProductName = normalizeProductName(productName);
+        if (normalizedProductName.isEmpty()) {
+            throw new BusinessException("商品名称不能为空");
+        }
+        String normalizedSpec = normalizeSpec(spec);
+        String normalizedPlatform = normalizePlatform(platform);
+
+        upsertPrice(
+                normalizedPlatform,
+                normalizedProductName,
+                normalizedSpec,
+                costPrice == null ? null : normalizePrice(costPrice, "成本价"),
+                supplyPrice == null ? null : normalizePrice(supplyPrice, "供货价"));
+
+        int costUpdated = 0;
+        int supplyUpdated = 0;
+        if (costPrice != null) {
+            BigDecimal normalizedCost = normalizePrice(costPrice, "成本价");
+            productPriceRepository.updateCostPriceByProductKey(
+                    normalizedProductName, normalizedSpec, normalizedCost);
+            costUpdated =
+                    importOrderRepository.updateCostPriceByProductKey(
+                            normalizedProductName, normalizedSpec, normalizedCost);
+        }
+        if (supplyPrice != null) {
+            supplyUpdated =
+                    importOrderRepository.updateSupplyPriceByProductPlatformKey(
+                            normalizedProductName,
+                            normalizedSpec,
+                            normalizedPlatform,
+                            normalizePrice(supplyPrice, "供货价"));
+        }
+        return new ProductPriceSaveResult(costUpdated, supplyUpdated);
+    }
+
+    @Transactional
+    public ProductPriceSaveResult upsertImportedRow(
+            String platform,
+            String productName,
+            String spec,
+            BigDecimal costPrice,
+            BigDecimal supplyPrice) {
+        return saveMaintenancePrices(productName, spec, platform, costPrice, supplyPrice);
     }
 
     private Optional<BigDecimal> resolveCostPrice(String productName, String spec) {
-        return productCostPriceRepository
-                .findByProductNameAndSpec(productName, spec)
-                .map(ProductCostPrice::getCostPrice);
+        List<ProductPrice> rows = productPriceRepository.findByProductNameAndSpec(productName, spec);
+        for (ProductPrice row : rows) {
+            if (row.getCostPrice() != null) {
+                return Optional.of(row.getCostPrice());
+            }
+        }
+        return Optional.empty();
     }
 
-    private Optional<BigDecimal> resolveSupplyPrice(String productName, String spec, String platform) {
-        return productSupplyPriceRepository
-                .findByProductNameAndSpecAndPlatform(productName, spec, platform)
-                .map(ProductSupplyPrice::getSupplyPrice);
+    private Optional<BigDecimal> resolveSupplyPrice(
+            String productName, String spec, String platform) {
+        return productPriceRepository
+                .findByPlatformAndProductNameAndSpec(platform, productName, spec)
+                .map(ProductPrice::getSupplyPrice)
+                .filter(price -> price != null);
     }
 
-    private void upsertCostPrice(String productName, String spec, BigDecimal costPrice) {
-        productCostPriceRepository.upsertCostPrice(productName, spec, costPrice);
-    }
-
-    private void upsertSupplyPrice(
-            String productName, String spec, String platform, BigDecimal supplyPrice) {
-        productSupplyPriceRepository.upsertSupplyPrice(
-                productName, spec, platform, supplyPrice);
+    private void upsertPrice(
+            String platform,
+            String productName,
+            String spec,
+            BigDecimal costPrice,
+            BigDecimal supplyPrice) {
+        productPriceRepository.upsert(platform, productName, spec, costPrice, supplyPrice);
     }
 
     private ProductKey requireProductKey(ImportOrder order) {
@@ -206,25 +272,27 @@ public class ProductPriceService {
         return price.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private String productSpecKey(String productName, String spec) {
+    String productSpecKey(String productName, String spec) {
         return normalizeProductName(productName) + KEY_SEPARATOR + normalizeSpec(spec);
     }
 
-    private String productSpecPlatformKey(String productName, String spec, String platform) {
+    String productSpecPlatformKey(String productName, String spec, String platform) {
         return productSpecKey(productName, spec) + KEY_SEPARATOR + normalizePlatform(platform);
     }
 
-    private String normalizeProductName(String productName) {
+    String normalizeProductName(String productName) {
         return productName == null ? "" : productName.trim();
     }
 
-    private String normalizeSpec(String spec) {
+    String normalizeSpec(String spec) {
         return spec == null ? "" : spec.trim();
     }
 
-    private String normalizePlatform(String platform) {
+    String normalizePlatform(String platform) {
         return platform == null ? "" : platform.trim();
     }
 
     private record ProductKey(String productName, String spec) {}
+
+    public record ProductPriceSaveResult(int costUpdatedCount, int supplyUpdatedCount) {}
 }

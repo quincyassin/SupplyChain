@@ -668,6 +668,95 @@ export async function deleteMerchantConfig(id: number): Promise<void> {
   }
 }
 
+export interface ProductPriceItem {
+  platform: string;
+  productName: string;
+  spec: string;
+  costPrice?: number;
+  supplyPrice?: number;
+}
+
+export interface SaveProductPricePayload {
+  platform?: string;
+  productName: string;
+  spec?: string;
+  costPrice?: number;
+  supplyPrice?: number;
+}
+
+export async function fetchProductPrices(params?: {
+  keyword?: string;
+}): Promise<ProductPriceItem[]> {
+  try {
+    const { data } = await client.get<ProductPriceItem[]>("/product-prices", {
+      params,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function saveProductPrice(
+  payload: SaveProductPricePayload,
+): Promise<ProductPriceItem> {
+  try {
+    const { data } = await client.put<ProductPriceItem>(
+      "/product-prices",
+      payload,
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function batchDeleteProductPrices(
+  items: ProductPriceItem[],
+): Promise<{ deletedCount: number }> {
+  try {
+    const { data } = await client.delete<{ deletedCount: number }>(
+      "/product-prices/batch",
+      { data: { items } },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export interface ProductPriceImportResult {
+  importedCount: number;
+  skippedCount: number;
+  errors?: string[];
+}
+
+export async function importProductPrices(file: File): Promise<ProductPriceImportResult> {
+  const formData = new FormData();
+  formData.append("file", file);
+  try {
+    const { data } = await client.post<ProductPriceImportResult>(
+      "/product-prices/import",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function downloadProductPriceImportTemplate(): Promise<Blob> {
+  try {
+    const response = await client.get("/product-prices/import-template", {
+      responseType: "blob",
+    });
+    return response.data as Blob;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
 export async function suggestExcelHeaders(
   file: File,
 ): Promise<ReadHeadersResult> {

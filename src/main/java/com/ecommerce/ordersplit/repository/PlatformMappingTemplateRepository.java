@@ -18,4 +18,6 @@ public interface PlatformMappingTemplateRepository
   boolean existsByPlatform(String platform);
 
   List<PlatformMappingTemplate> findAllByOrderByPlatformAsc();
+
+  List<PlatformMappingTemplate> findAllByOrderByUpdatedAtDesc();
 }

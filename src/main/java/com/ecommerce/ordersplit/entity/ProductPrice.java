@@ -14,26 +14,29 @@ import lombok.Setter;
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
- * 商品供货价（按商品名称 + 规格 + 平台维护）
+ * 商品价格（平台 + 商品名称 + 规格）
  *
  * @author huangxinsong
  */
 @Entity
 @Table(
-        name = "product_supply_price",
+        name = "product_price",
         indexes = {
             @Index(
-                    name = "uk_product_supply_price_key",
-                    columnList = "product_name,spec,platform",
+                    name = "uk_product_price_key",
+                    columnList = "platform,product_name,spec",
                     unique = true)
         })
 @Getter
 @Setter
-public class ProductSupplyPrice {
+public class ProductPrice {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @Column(nullable = false, length = 128)
+    private String platform;
 
     @Column(name = "product_name", nullable = false, length = 255)
     private String productName;
@@ -41,10 +44,10 @@ public class ProductSupplyPrice {
     @Column(nullable = false, length = 128)
     private String spec;
 
-    @Column(nullable = false, length = 128)
-    private String platform;
+    @Column(name = "cost_price", precision = 12, scale = 2)
+    private BigDecimal costPrice;
 
-    @Column(name = "supply_price", nullable = false, precision = 12, scale = 2)
+    @Column(name = "supply_price", precision = 12, scale = 2)
     private BigDecimal supplyPrice;
 
     @UpdateTimestamp

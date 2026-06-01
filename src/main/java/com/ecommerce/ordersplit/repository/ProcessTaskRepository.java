@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.repository;
 
 import com.ecommerce.ordersplit.entity.ProcessTask;
+import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
@@ -9,4 +10,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
  * @author huangxinsong
  */
 public interface ProcessTaskRepository extends JpaRepository<ProcessTask, Long> {
+
+  List<ProcessTask> findTop20ByOrderByCreatedAtDesc();
 }

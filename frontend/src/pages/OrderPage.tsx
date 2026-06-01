@@ -1,5 +1,9 @@
 import UploadPanel from "../components/UploadPanel";
 
 export default function OrderPage() {
-  return <UploadPanel />;
+  return (
+    <div className="after-sales-page">
+      <UploadPanel />
+    </div>
+  );
 }

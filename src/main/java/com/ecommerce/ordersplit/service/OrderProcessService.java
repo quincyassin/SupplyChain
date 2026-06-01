@@ -863,13 +863,9 @@ public class OrderProcessService {
 
     @Transactional(readOnly = true)
     public List<TaskResponse> listRecentTasks() {
-        List<ProcessTask> tasks = processTaskRepository.findAll();
-        List<TaskResponse> responses = new ArrayList<>();
-        tasks.stream()
-                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt()))
-                .limit(20)
-                .forEach(t -> responses.add(toResponse(t)));
-        return responses;
+        return processTaskRepository.findTop20ByOrderByCreatedAtDesc().stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     private ProcessTask createTask(String fileName, OperationType operationType) {

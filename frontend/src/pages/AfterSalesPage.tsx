@@ -31,6 +31,7 @@ import {
   SplitResult,
   SplitTableRow,
 } from "../api/orderApi";
+import { useTableBodyScrollY } from "../hooks/useTableBodyScrollY";
 
 const { RangePicker } = DatePicker;
 
@@ -311,6 +312,11 @@ export default function AfterSalesPage() {
     }));
   }, [splitResult]);
 
+  const tableScrollViewportRef = useRef<HTMLDivElement>(null);
+  const tableScrollY = useTableBodyScrollY(tableScrollViewportRef, {
+    enabled: pageRows.length > 0,
+  });
+
   const statusFilterLabel = useMemo(
     () =>
       AFTER_SALES_STATUS_OPTIONS.find(
@@ -548,28 +554,30 @@ export default function AfterSalesPage() {
         )}
 
         {pageRows.length > 0 && (
-          <Table
-            rowKey={(row) => row.systemNo || `${row.orderNo}-${row.issueDate}`}
-            bordered
-            size="small"
-            loading={loading}
-            columns={columns}
-            dataSource={pageRows}
-            scroll={{ x: 1600, y: "calc(100vh - 220px)" }}
-            pagination={{
-              current: tablePage,
-              pageSize: tablePageSize,
-              total: pageRows.length,
-              showSizeChanger: true,
-              pageSizeOptions: ["10", "20", "50"],
-              showTotal: (total) => `共 ${total} 条`,
-              position: ["bottomRight"],
-              onChange: (page, pageSize) => {
-                setTablePage(page);
-                setTablePageSize(pageSize);
-              },
-            }}
-          />
+          <div className="table-scroll-viewport" ref={tableScrollViewportRef}>
+            <Table
+              rowKey={(row) => row.systemNo || `${row.orderNo}-${row.issueDate}`}
+              bordered
+              size="small"
+              loading={loading}
+              columns={columns}
+              dataSource={pageRows}
+              scroll={{ x: 1600, y: tableScrollY }}
+              pagination={{
+                current: tablePage,
+                pageSize: tablePageSize,
+                total: pageRows.length,
+                showSizeChanger: true,
+                pageSizeOptions: ["10", "20", "50"],
+                showTotal: (total) => `共 ${total} 条`,
+                position: ["bottomRight"],
+                onChange: (page, pageSize) => {
+                  setTablePage(page);
+                  setTablePageSize(pageSize);
+                },
+              }}
+            />
+          </div>
         )}
       </div>
 

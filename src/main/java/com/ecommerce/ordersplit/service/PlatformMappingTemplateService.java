@@ -46,7 +46,7 @@ public class PlatformMappingTemplateService {
 
   @Transactional(readOnly = true)
   public List<PlatformTemplateSummaryDto> listSummaries() {
-    return templateRepository.findAllByOrderByPlatformAsc().stream()
+    return templateRepository.findAllByOrderByUpdatedAtDesc().stream()
         .map(
             entity ->
                 new PlatformTemplateSummaryDto(
@@ -89,7 +89,7 @@ public class PlatformMappingTemplateService {
 
   @Transactional(readOnly = true)
   public TemplateHeaderMatch matchByHeaders(List<ExcelHeaderDto> uploadHeaders) {
-    List<PlatformMappingTemplate> templates = templateRepository.findAllByOrderByPlatformAsc();
+    List<PlatformMappingTemplate> templates = templateRepository.findAllByOrderByUpdatedAtDesc();
     if (templates.isEmpty()) {
       throw new BusinessException("尚未配置任何平台模板，请先到「系统配置 → 表头映射」中添加");
     }

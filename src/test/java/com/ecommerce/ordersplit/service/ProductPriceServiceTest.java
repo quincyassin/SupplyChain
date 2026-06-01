@@ -1,17 +1,14 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.entity.ImportOrder;
-import com.ecommerce.ordersplit.entity.ProductCostPrice;
-import com.ecommerce.ordersplit.entity.ProductSupplyPrice;
+import com.ecommerce.ordersplit.entity.ProductPrice;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
-import com.ecommerce.ordersplit.repository.ProductCostPriceRepository;
-import com.ecommerce.ordersplit.repository.ProductSupplyPriceRepository;
+import com.ecommerce.ordersplit.repository.ProductPriceRepository;
+import com.ecommerce.ordersplit.service.ProductPriceService.ImportPriceLookup;
 import java.math.BigDecimal;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import com.ecommerce.ordersplit.service.ProductPriceService.ImportPriceLookup;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -22,6 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -33,28 +31,18 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class ProductPriceServiceTest {
 
-    @Mock
-    private ProductCostPriceRepository productCostPriceRepository;
-
-    @Mock
-    private ProductSupplyPriceRepository productSupplyPriceRepository;
-
-    @Mock
-    private ImportOrderRepository importOrderRepository;
+    @Mock private ProductPriceRepository productPriceRepository;
+    @Mock private ImportOrderRepository importOrderRepository;
 
     private ProductPriceService productPriceService;
 
     @BeforeEach
     void setUp() {
-        productPriceService =
-                new ProductPriceService(
-                        productCostPriceRepository,
-                        productSupplyPriceRepository,
-                        importOrderRepository);
+        productPriceService = new ProductPriceService(productPriceRepository, importOrderRepository);
     }
 
     @Test
-    void saveCostPriceAndPropagate_shouldUpsertConfigAndUpdateOrders() {
+    void saveCostPriceAndPropagate_shouldUpsertAndSyncOrders() {
         ImportOrder order = sampleOrder("商品A", "规格1", "淘宝");
         when(importOrderRepository.updateCostPriceByProductKey(
                         eq("商品A"), eq("规格1"), eq(new BigDecimal("18.50"))))
@@ -64,8 +52,10 @@ class ProductPriceServiceTest {
                 productPriceService.saveCostPriceAndPropagate(order, new BigDecimal("18.5"));
 
         assertEquals(3, updated);
-        verify(productCostPriceRepository)
-                .upsertCostPrice("商品A", "规格1", new BigDecimal("18.50"));
+        verify(productPriceRepository)
+                .upsert("淘宝", "商品A", "规格1", new BigDecimal("18.50"), null);
+        verify(productPriceRepository)
+                .updateCostPriceByProductKey("商品A", "规格1", new BigDecimal("18.50"));
     }
 
     @Test
@@ -79,43 +69,19 @@ class ProductPriceServiceTest {
                 productPriceService.saveSupplyPriceAndPropagate(order, new BigDecimal("22"));
 
         assertEquals(2, updated);
-        verify(productSupplyPriceRepository)
-                .upsertSupplyPrice("商品A", "规格1", "淘宝", new BigDecimal("22.00"));
-    }
-
-    @Test
-    void applyConfiguredPrices_shouldFillFromConfigTables() {
-        ImportOrder order = sampleOrder("商品A", "规格1", "淘宝");
-        when(productCostPriceRepository.findByProductNameAndSpec("商品A", "规格1"))
-                .thenReturn(
-                        Optional.of(configuredCost("商品A", "规格1", new BigDecimal("10.00"))));
-        when(productSupplyPriceRepository.findByProductNameAndSpecAndPlatform(
-                        "商品A", "规格1", "淘宝"))
-                .thenReturn(
-                        Optional.of(
-                                configuredSupply(
-                                        "商品A", "规格1", "淘宝", new BigDecimal("12.00"))));
-
-        productPriceService.applyConfiguredPrices(order);
-
-        assertEquals(new BigDecimal("10.00"), order.getCostPrice());
-        assertEquals(new BigDecimal("12.00"), order.getSupplyPrice());
+        verify(productPriceRepository)
+                .upsert("淘宝", "商品A", "规格1", null, new BigDecimal("22.00"));
     }
 
     @Test
     void buildLookupForImport_shouldBatchResolvePrices() {
         ImportOrder first = sampleOrder("商品A", "规格1", "淘宝");
         ImportOrder second = sampleOrder("商品B", "规格2", "京东");
-        when(productCostPriceRepository.findByProductNameIn(any()))
+        when(productPriceRepository.findByProductNameIn(any()))
                 .thenReturn(
                         List.of(
-                                configuredCost("商品A", "规格1", new BigDecimal("10.00")),
-                                configuredCost("商品B", "规格2", new BigDecimal("20.00"))));
-        when(productSupplyPriceRepository.findByProductNameIn(any()))
-                .thenReturn(
-                        List.of(
-                                configuredSupply(
-                                        "商品A", "规格1", "淘宝", new BigDecimal("12.00"))));
+                                configuredPrice("商品A", "规格1", "淘宝", new BigDecimal("10.00"), new BigDecimal("12.00")),
+                                configuredPrice("商品B", "规格2", "京东", new BigDecimal("20.00"), null)));
 
         ImportPriceLookup lookup =
                 productPriceService.buildLookupForImport(List.of(first, second));
@@ -130,11 +96,32 @@ class ProductPriceServiceTest {
     }
 
     @Test
-    void saveCostPriceAndPropagate_shouldRejectEmptyProductName() {
-        ImportOrder order = sampleOrder("  ", "规格1", "淘宝");
+    void saveMaintenancePrices_shouldRequireAtLeastOnePrice() {
         assertThrows(
                 BusinessException.class,
-                () -> productPriceService.saveCostPriceAndPropagate(order, BigDecimal.ONE));
+                () ->
+                        productPriceService.saveMaintenancePrices(
+                                "商品A", "规格1", "淘宝", null, null));
+    }
+
+    @Test
+    void applyConfiguredPrices_shouldFillFromUnifiedTable() {
+        ImportOrder order = sampleOrder("商品A", "规格1", "淘宝");
+        when(productPriceRepository.findByProductNameAndSpec("商品A", "规格1"))
+                .thenReturn(
+                        List.of(
+                                configuredPrice(
+                                        "商品A", "规格1", "淘宝", new BigDecimal("10.00"), new BigDecimal("12.00"))));
+        when(productPriceRepository.findByPlatformAndProductNameAndSpec("淘宝", "商品A", "规格1"))
+                .thenReturn(
+                        Optional.of(
+                                configuredPrice(
+                                        "商品A", "规格1", "淘宝", new BigDecimal("10.00"), new BigDecimal("12.00"))));
+
+        productPriceService.applyConfiguredPrices(order);
+
+        assertEquals(new BigDecimal("10.00"), order.getCostPrice());
+        assertEquals(new BigDecimal("12.00"), order.getSupplyPrice());
     }
 
     private ImportOrder sampleOrder(String productName, String spec, String platform) {
@@ -146,21 +133,18 @@ class ProductPriceServiceTest {
         return order;
     }
 
-    private ProductCostPrice configuredCost(String productName, String spec, BigDecimal price) {
-        ProductCostPrice entity = new ProductCostPrice();
-        entity.setProductName(productName);
-        entity.setSpec(spec);
-        entity.setCostPrice(price);
-        return entity;
-    }
-
-    private ProductSupplyPrice configuredSupply(
-            String productName, String spec, String platform, BigDecimal price) {
-        ProductSupplyPrice entity = new ProductSupplyPrice();
+    private ProductPrice configuredPrice(
+            String productName,
+            String spec,
+            String platform,
+            BigDecimal costPrice,
+            BigDecimal supplyPrice) {
+        ProductPrice entity = new ProductPrice();
         entity.setProductName(productName);
         entity.setSpec(spec);
         entity.setPlatform(platform);
-        entity.setSupplyPrice(price);
+        entity.setCostPrice(costPrice);
+        entity.setSupplyPrice(supplyPrice);
         return entity;
     }
 }

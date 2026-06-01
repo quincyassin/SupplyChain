@@ -107,7 +107,7 @@ class PlatformMappingTemplateServiceTest {
         "[{\"fieldKey\":\"orderNo\",\"sourceIndex\":0,\"enabled\":true,\"sortOrder\":0},"
             + "{\"fieldKey\":\"productName\",\"sourceIndex\":1,\"enabled\":true,\"sortOrder\":1}]");
 
-    when(templateRepository.findAllByOrderByPlatformAsc()).thenReturn(List.of(templateA, templateB));
+    when(templateRepository.findAllByOrderByUpdatedAtDesc()).thenReturn(List.of(templateA, templateB));
     when(templateRepository.findByPlatform("淘宝")).thenReturn(Optional.of(templateA));
 
     TemplateHeaderMatch match =
@@ -220,7 +220,7 @@ class PlatformMappingTemplateServiceTest {
 
   @Test
   void matchByHeaders_shouldFailWhenNoTemplateMatches() {
-    when(templateRepository.findAllByOrderByPlatformAsc()).thenReturn(List.of());
+    when(templateRepository.findAllByOrderByUpdatedAtDesc()).thenReturn(List.of());
 
     assertThrows(BusinessException.class, () -> service.matchByHeaders(List.of(new ExcelHeaderDto(0, "订单编号"))));
   }
@@ -233,7 +233,7 @@ class PlatformMappingTemplateServiceTest {
         "[{\"columnIndex\":0,\"headerName\":\"订单编号\"},{\"columnIndex\":1,\"headerName\":\"商品名称\"}]");
     templateA.setMappingJson("[]");
 
-    when(templateRepository.findAllByOrderByPlatformAsc()).thenReturn(List.of(templateA));
+    when(templateRepository.findAllByOrderByUpdatedAtDesc()).thenReturn(List.of(templateA));
 
     assertThrows(
         BusinessException.class,
@@ -255,7 +255,7 @@ class PlatformMappingTemplateServiceTest {
             + "{\"columnIndex\":7,\"headerName\":\"买家备注\"}]");
     templateA.setMappingJson("[]");
 
-    when(templateRepository.findAllByOrderByPlatformAsc()).thenReturn(List.of(templateA));
+    when(templateRepository.findAllByOrderByUpdatedAtDesc()).thenReturn(List.of(templateA));
 
     assertThrows(
         BusinessException.class,
@@ -289,7 +289,7 @@ class PlatformMappingTemplateServiceTest {
     templateB.setTemplateHeadersJson(headersJson);
     templateB.setMappingJson(mappingJson);
 
-    when(templateRepository.findAllByOrderByPlatformAsc())
+    when(templateRepository.findAllByOrderByUpdatedAtDesc())
         .thenReturn(List.of(templateA, templateB));
     when(templateRepository.findByPlatform("淘宝")).thenReturn(Optional.of(templateA));
     when(templateRepository.findByPlatform("拼多多")).thenReturn(Optional.of(templateB));

@@ -22,9 +22,6 @@ interface ExcelColumnMappingRow {
   enabled: boolean;
 }
 
-/** 表头占用高度 */
-const MAPPING_TABLE_CHROME_HEIGHT = 56;
-
 const PRODUCT_NAME_FIELD_KEY = "productName";
 
 function applyColumnFieldChange(
@@ -87,10 +84,7 @@ export default function HeaderMappingPanel({
   onChange,
 }: HeaderMappingPanelProps) {
   const tableAreaRef = useRef<HTMLDivElement>(null);
-  const tableScrollY = useTableBodyScrollY(
-    tableAreaRef,
-    MAPPING_TABLE_CHROME_HEIGHT,
-  );
+  const tableScrollY = useTableBodyScrollY(tableAreaRef);
 
   const completeMapping = useMemo(
     () => ensureCompleteMapping(mapping, fields, excelHeaders),

@@ -1190,7 +1190,6 @@ function EditableOrderFieldCell({
 }
 
 /** 表头 + 分页占用高度（scroll.y 容器为 table-scroll-viewport） */
-const TABLE_CHROME_HEIGHT = 108;
 
 export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2459,10 +2458,9 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     () => tableScrollViewportRef.current ?? document.body,
     [],
   );
-  const tableScrollY = useTableBodyScrollY(
-    tableScrollViewportRef,
-    TABLE_CHROME_HEIGHT,
-  );
+  const tableScrollY = useTableBodyScrollY(tableScrollViewportRef, {
+    enabled: hasRangeOrders,
+  });
 
   const handleTablePageChange = useCallback(
     (page: number, pageSize: number) => {
