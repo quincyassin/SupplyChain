@@ -11,6 +11,7 @@ import {
 } from "antd";
 import { CopyOutlined, ReloadOutlined } from "@ant-design/icons";
 import { fetchLicenseStatus, type LicenseStatus } from "../api/licenseApi";
+import { copyTextToClipboard } from "../utils/clipboard";
 import LicenseActivateForm from "./LicenseActivateForm";
 
 const { Text, Paragraph } = Typography;
@@ -44,14 +45,17 @@ export default function LicensePanel({
   }, []);
 
   async function handleCopyMachineId() {
-    if (!status?.machineIdDisplay) {
+    const machineId =
+      status?.machineId ??
+      status?.machineIdDisplay?.replace(/[-\s]/g, "").toLowerCase();
+    if (!machineId) {
       return;
     }
     try {
-      await navigator.clipboard.writeText(status.machineIdDisplay);
-      message.success("机器码已复制");
+      await copyTextToClipboard(machineId);
+      message.success("用户编号已复制");
     } catch {
-      message.error("复制失败，请手动复制机器码");
+      message.error("复制失败，请手动复制用户编号");
     }
   }
 
@@ -85,11 +89,24 @@ export default function LicensePanel({
           </Descriptions.Item>
           <Descriptions.Item label="用户编号">
             <Space>
-              <Text code>{status?.machineIdDisplay ?? "-"}</Text>
+              <Text
+                code
+                copyable={
+                  status?.machineId
+                    ? {
+                        text: status.machineId,
+                        tooltips: ["复制用户编号", "已复制"],
+                        onCopy: () => message.success("用户编号已复制"),
+                      }
+                    : false
+                }
+              >
+                {status?.machineIdDisplay ?? "-"}
+              </Text>
               <Button
                 size="small"
                 icon={<CopyOutlined />}
-                disabled={!status?.machineIdDisplay}
+                disabled={!status?.machineId && !status?.machineIdDisplay}
                 onClick={() => void handleCopyMachineId()}
               >
                 复制
