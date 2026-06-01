@@ -299,7 +299,7 @@ public class ImportOrderPersistenceService {
 
         if (!rowsForSplit.isEmpty()) {
             Map<String, List<OrderRow>> splitResult =
-                    orderSplitMergeService.splitByMerchant(rowsForSplit);
+                    orderSplitMergeService.groupByMerchant(rowsForSplit);
             Map<String, OrderRow> splitBySystemNo = new HashMap<>();
             for (List<OrderRow> rows : splitResult.values()) {
                 for (OrderRow row : rows) {

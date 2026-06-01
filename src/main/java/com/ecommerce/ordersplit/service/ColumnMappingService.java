@@ -246,12 +246,25 @@ public class ColumnMappingService {
                 int savedIndex =
                         savedDto.getSourceIndex() == null ? -1 : savedDto.getSourceIndex();
                 boolean savedEnabled = savedDto.getEnabled() == null || savedDto.getEnabled();
-                if (savedEnabled
-                        && savedIndex >= 0
-                        && columnIndexMatchesField(
-                                templateHeaders, savedIndex, suggestedItem.getFieldKey())) {
-                    merged.setSourceIndex(savedIndex);
-                    merged.setEnabled(true);
+                if (!savedEnabled) {
+                    merged.setSourceIndex(-1);
+                    merged.setEnabled(false);
+                } else if (savedIndex >= 0 && columnExistsInTemplate(templateHeaders, savedIndex)) {
+                    if (columnIndexMatchesField(
+                            templateHeaders, savedIndex, suggestedItem.getFieldKey())) {
+                        merged.setSourceIndex(savedIndex);
+                        merged.setEnabled(true);
+                    } else if (suggestedItem.isEnabled()
+                            && suggestedItem.getSourceIndex() >= 0
+                            && suggestedItem.getSourceIndex() != savedIndex) {
+                        // 已保存列索引与字段不匹配，但能在其它列按表头自动匹配时修正
+                        merged.setSourceIndex(suggestedItem.getSourceIndex());
+                        merged.setEnabled(true);
+                    } else {
+                        // 用户手动映射到非标准表头，保留列索引
+                        merged.setSourceIndex(savedIndex);
+                        merged.setEnabled(true);
+                    }
                 } else if (suggestedItem.isEnabled() && suggestedItem.getSourceIndex() >= 0) {
                     merged.setSourceIndex(suggestedItem.getSourceIndex());
                     merged.setEnabled(true);
@@ -354,6 +367,15 @@ public class ColumnMappingService {
         for (ExcelHeaderDto header : headers) {
             if (header.getColumnIndex() == columnIndex) {
                 return headerMatchesField(header.getHeaderName(), fieldKey);
+            }
+        }
+        return false;
+    }
+
+    private boolean columnExistsInTemplate(List<ExcelHeaderDto> headers, int columnIndex) {
+        for (ExcelHeaderDto header : headers) {
+            if (header.getColumnIndex() == columnIndex) {
+                return true;
             }
         }
         return false;

@@ -223,14 +223,22 @@ export default function HeaderMappingConfig() {
     }
     setSaving(true);
     try {
-      await savePlatformTemplate(selectedPlatform, {
+      const detail = await savePlatformTemplate(selectedPlatform, {
         mapping: mapping.map((item, index) => ({ ...item, sortOrder: index })),
         templateHeaders: excelHeaders,
         templateFileName: templateFileName ?? undefined,
       });
       message.success(`平台「${selectedPlatform}」模板已保存`);
       await reloadPlatformList();
-      await loadPlatformDetail(selectedPlatform);
+      setExcelHeaders(detail.templateHeaders ?? []);
+      setTemplateFileName(detail.templateFileName ?? null);
+      setMapping(
+        ensureCompleteMapping(
+          detail.mapping ?? [],
+          fieldsRef.current,
+          detail.templateHeaders ?? [],
+        ),
+      );
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "保存失败");
     } finally {

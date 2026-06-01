@@ -237,6 +237,30 @@ class ColumnMappingServiceTest {
     }
 
     @Test
+    void mergePlatformMapping_shouldPreserveManualMappingWhenHeaderNameDoesNotMatch() {
+        List<ColumnMappingItemDto> saved =
+                List.of(
+                        createMappingDto("orderNo", 0, true, 0),
+                        createMappingDto("productName", 1, true, 1),
+                        createMappingDto("receiver", 2, true, 2));
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"),
+                        new ExcelHeaderDto(2, "买家昵称"));
+
+        List<ColumnMappingItemDto> merged = service.mergePlatformMapping(saved, headers);
+
+        ColumnMappingItemDto receiver =
+                merged.stream()
+                        .filter(item -> "receiver".equals(item.getFieldKey()))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals(2, receiver.getSourceIndex().intValue());
+        assertEquals(true, receiver.getEnabled());
+    }
+
+    @Test
     void mergePlatformMapping_shouldFallbackWhenSavedIndexPointsToWrongHeader() {
         List<ColumnMappingItemDto> saved =
                 List.of(

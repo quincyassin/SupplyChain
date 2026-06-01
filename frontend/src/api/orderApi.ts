@@ -924,6 +924,7 @@ export async function assignMerchantsForDate(
   return assignPendingMerchantsForRange(date, date);
 }
 
+/** @deprecated 请使用 {@link #importOrdersByPlatform}，上传导入已统一走 /import */
 export async function splitByMerchant(
   file: File,
   mapping: ColumnMappingItem[] | null,

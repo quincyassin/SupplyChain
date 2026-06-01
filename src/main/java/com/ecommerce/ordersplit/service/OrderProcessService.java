@@ -794,7 +794,7 @@ public class OrderProcessService {
             }
         }
 
-        Map<String, List<OrderRow>> splitResult = orderSplitMergeService.splitByMerchant(inputRows);
+        Map<String, List<OrderRow>> splitResult = orderSplitMergeService.groupByMerchant(inputRows);
 
         LocalDateTime issueDateTime = dailyTableService.currentIssueDateTime();
         int savedCount =

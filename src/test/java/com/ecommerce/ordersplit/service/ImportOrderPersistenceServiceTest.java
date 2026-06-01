@@ -218,7 +218,7 @@ class ImportOrderPersistenceServiceTest {
             .sourceRowNum(3)
             .systemNo(SYSTEM_NO_2)
             .build();
-    when(orderSplitMergeService.splitByMerchant(ArgumentMatchers.anyList()))
+    when(orderSplitMergeService.groupByMerchant(ArgumentMatchers.anyList()))
         .thenReturn(
             Map.of(
                 "商家A", List.of(assignedRow),
@@ -266,7 +266,7 @@ class ImportOrderPersistenceServiceTest {
                 ArgumentMatchers.any(), ArgumentMatchers.any()))
         .thenReturn(List.of(assigned, pending));
     when(merchantConfigService.resolveByProductName("匹配商品")).thenReturn("新商家");
-    when(orderSplitMergeService.splitByMerchant(ArgumentMatchers.anyList()))
+    when(orderSplitMergeService.groupByMerchant(ArgumentMatchers.anyList()))
         .thenReturn(
             Map.of(
                 "新商家",
