@@ -15,11 +15,14 @@ import dayjs, { Dayjs } from "dayjs";
 import { DownloadOutlined } from "@ant-design/icons";
 import {
   downloadBlob,
+  downloadReconcileExport,
   exportMerchantReconcile,
   exportPlatformReconcile,
   fetchImportedOrdersByDateRange,
   formatLocalDateKey,
+  openReconcileExportDirectory,
   PENDING_SPLIT_MERCHANT,
+  type ReconcileExportResult,
 } from "../api/orderApi";
 
 const { RangePicker } = DatePicker;
@@ -198,38 +201,75 @@ export default function ReconcilePage() {
           message.warning("请选择商家");
           return;
         }
-        const blob = await exportMerchantReconcile({
+        const result = await exportMerchantReconcile({
           startDate: range.start,
           endDate: range.end,
           merchant: selectedMerchant,
         });
-        downloadBlob(
-          blob,
+        await finishReconcileExport(
+          result,
           buildExportFilename("商家对账", selectedMerchant, range),
+          `商家「${selectedMerchant}」`,
         );
-        message.success(`已导出商家「${selectedMerchant}」对账数据`);
         return;
       }
       if (!selectedPlatform) {
         message.warning("请选择平台");
         return;
       }
-      const blob = await exportPlatformReconcile({
+      const result = await exportPlatformReconcile({
         startDate: range.start,
         endDate: range.end,
         platform: selectedPlatform,
       });
-      downloadBlob(
-        blob,
+      await finishReconcileExport(
+        result,
         buildExportFilename("平台对账", selectedPlatform, range),
+        `平台「${selectedPlatform}」`,
       );
-      message.success(`已导出平台「${selectedPlatform}」对账数据`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "导出失败";
       setErrorAlert(msg);
     } finally {
       setExporting(false);
     }
+  };
+
+  const finishReconcileExport = async (
+    result: ReconcileExportResult,
+    downloadName: string,
+    targetLabel: string,
+  ) => {
+    const exportDate = result.exportDate;
+    let reconcileExportFolderOpened = false;
+    if (
+      result.exportMode === "BROWSER_DOWNLOAD" &&
+      result.exportedFileCount > 0 &&
+      result.exportDownloadToken
+    ) {
+      const blob = await downloadReconcileExport(result.exportDownloadToken);
+      downloadBlob(blob, downloadName);
+    } else if (
+      result.exportMode === "SERVER_DIRECTORY" &&
+      result.exportedFileCount > 0 &&
+      exportDate
+    ) {
+      try {
+        await openReconcileExportDirectory(exportDate);
+        reconcileExportFolderOpened = true;
+      } catch (openErr: unknown) {
+        const openMsg =
+          openErr instanceof Error ? openErr.message : "无法打开导出文件夹";
+        message.warning(openMsg);
+      }
+    }
+    const folderHint =
+      result.exportMode === "SERVER_DIRECTORY" && exportDate
+        ? reconcileExportFolderOpened
+          ? `，已打开 testData/${exportDate}/对账`
+          : `，已导出到桌面 testData/${exportDate}/对账`
+        : "";
+    message.success(`已导出${targetLabel}对账数据${folderHint}`);
   };
 
   const tabItems = [

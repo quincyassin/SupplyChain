@@ -817,6 +817,35 @@ public class MerchantSplitExportService {
     }
 
     /**
+     * 指定日期的对账导出目录（桌面 testData/{日期}/对账/）
+     */
+    public Path getReconcileExportDirectory(LocalDate date) {
+        return resolveReconcileExportDir(date);
+    }
+
+    Path resolveReconcileExportDir(LocalDate date) {
+        return resolveDateRootDir(date).resolve(RECONCILE_SUBDIR);
+    }
+
+    /**
+     * 将对账 Excel 写入桌面 testData/{exportDate}/对账/
+     */
+    public List<String> writeReconcileFile(LocalDate exportDate, String fileName, byte[] fileBytes)
+            throws IOException {
+        if (fileBytes == null || fileBytes.length == 0) {
+            throw new BusinessException("导出内容为空，无法写入文件");
+        }
+        ensureDateExportLayout(exportDate);
+        Path outputPath = resolveUniqueOutputPath(resolveReconcileExportDir(exportDate), fileName);
+        Files.write(
+                outputPath,
+                fileBytes,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
+        return List.of(outputPath.toString());
+    }
+
+    /**
      * 指定日期的分单导出目录（桌面 testData/{日期}/分单/）
      */
     public Path getSplitExportDirectory(LocalDate date) {

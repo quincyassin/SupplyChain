@@ -9,6 +9,7 @@ import com.ecommerce.ordersplit.dto.OrderFieldDto;
 import com.ecommerce.ordersplit.dto.ReadHeadersResponse;
 import com.ecommerce.ordersplit.dto.ReceiptExportResponse;
 import com.ecommerce.ordersplit.dto.ReconcileExportRequest;
+import com.ecommerce.ordersplit.dto.ReconcileExportResponse;
 import com.ecommerce.ordersplit.dto.SplitResultResponse;
 import com.ecommerce.ordersplit.dto.TaskResponse;
 import com.ecommerce.ordersplit.dto.MarkAfterSalesRequest;
@@ -259,21 +260,41 @@ public class OrderController {
     }
 
     /**
-     * 商家对账导出
+     * 商家对账导出（写盘或返回下载令牌）
      */
     @PostMapping("/export/reconcile/merchant")
-    public ResponseEntity<Resource> exportMerchantReconcile(
+    public ResponseEntity<ReconcileExportResponse> exportMerchantReconcile(
             @RequestBody ReconcileExportRequest request) {
-        return orderProcessService.exportMerchantReconcile(request);
+        return ResponseEntity.ok(orderProcessService.exportMerchantReconcile(request));
     }
 
     /**
-     * 平台对账导出
+     * 平台对账导出（写盘或返回下载令牌）
      */
     @PostMapping("/export/reconcile/platform")
-    public ResponseEntity<Resource> exportPlatformReconcile(
+    public ResponseEntity<ReconcileExportResponse> exportPlatformReconcile(
             @RequestBody ReconcileExportRequest request) {
-        return orderProcessService.exportPlatformReconcile(request);
+        return ResponseEntity.ok(orderProcessService.exportPlatformReconcile(request));
+    }
+
+    /**
+     * 对账 Excel 浏览器下载
+     */
+    @GetMapping("/export/reconcile")
+    public ResponseEntity<Resource> downloadReconcileExport(
+            @RequestParam("downloadToken") String downloadToken) {
+        return orderProcessService.downloadReconcileExport(downloadToken);
+    }
+
+    /**
+     * 打开对账导出目录（testData/{exportDate}/对账/）
+     */
+    @PostMapping("/export/open-reconcile-directory")
+    public ResponseEntity<Void> openReconcileExportDirectory(
+            @RequestParam("exportDate") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate exportDate) {
+        orderProcessService.openReconcileExportDirectory(exportDate);
+        return ResponseEntity.noContent().build();
     }
 
     /**

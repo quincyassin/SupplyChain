@@ -14,6 +14,7 @@ import com.ecommerce.ordersplit.dto.ReadHeadersResponse;
 import com.ecommerce.ordersplit.dto.PlatformExportTemplateDto;
 import com.ecommerce.ordersplit.dto.ReceiptExportResponse;
 import com.ecommerce.ordersplit.dto.ReconcileExportRequest;
+import com.ecommerce.ordersplit.dto.ReconcileExportResponse;
 import com.ecommerce.ordersplit.dto.SplitResultResponse;
 import com.ecommerce.ordersplit.dto.TaskResponse;
 import com.ecommerce.ordersplit.dto.MarkAfterSalesRequest;
@@ -708,10 +709,23 @@ public class OrderProcessService {
     }
 
     /**
+     * 打开对账导出目录（testData/{exportDate}/对账/）
+     */
+    @Transactional(readOnly = true)
+    public void openReconcileExportDirectory(LocalDate exportDate) {
+        if (exportSettingsService.getCurrentMode() != ExportMode.SERVER_DIRECTORY) {
+            throw new BusinessException("当前导出方式不是桌面目录，无法自动打开文件夹");
+        }
+        LocalDate normalizedExportDate = importOrderQueryService.requireRecentDate(exportDate);
+        folderOpenService.openDirectory(
+                merchantSplitExportService.getReconcileExportDirectory(normalizedExportDate));
+    }
+
+    /**
      * 商家对账导出（不含平台/商家/供货价）
      */
     @Transactional(readOnly = true)
-    public ResponseEntity<Resource> exportMerchantReconcile(ReconcileExportRequest request) {
+    public ReconcileExportResponse exportMerchantReconcile(ReconcileExportRequest request) {
         if (request == null) {
             throw new BusinessException("请选择日期区间与商家");
         }
@@ -724,7 +738,7 @@ public class OrderProcessService {
             String downloadName =
                     buildReconcileDownloadName(
                             "商家对账", merchantLabel, request.getStartDate(), request.getEndDate());
-            return buildExcelDownloadResponse(outputBytes, downloadName);
+            return persistReconcileExport(outputBytes, downloadName);
         } catch (IOException ex) {
             throw new BusinessException("导出 Excel 失败: " + ex.getMessage());
         }
@@ -734,7 +748,7 @@ public class OrderProcessService {
      * 平台对账导出（不含平台/商家/成本价）
      */
     @Transactional(readOnly = true)
-    public ResponseEntity<Resource> exportPlatformReconcile(ReconcileExportRequest request) {
+    public ReconcileExportResponse exportPlatformReconcile(ReconcileExportRequest request) {
         if (request == null) {
             throw new BusinessException("请选择日期区间与平台");
         }
@@ -747,10 +761,36 @@ public class OrderProcessService {
             String downloadName =
                     buildReconcileDownloadName(
                             "平台对账", platformLabel, request.getStartDate(), request.getEndDate());
-            return buildExcelDownloadResponse(outputBytes, downloadName);
+            return persistReconcileExport(outputBytes, downloadName);
         } catch (IOException ex) {
             throw new BusinessException("导出 Excel 失败: " + ex.getMessage());
         }
+    }
+
+    /**
+     * 对账 Excel 浏览器下载（浏览器下载模式使用）
+     */
+    @Transactional(readOnly = true)
+    public ResponseEntity<Resource> downloadReconcileExport(String downloadToken) {
+        ExportDownloadCacheService.CachedExport cached =
+                exportDownloadCacheService.take(downloadToken);
+        return buildExcelDownloadResponse(cached.zipBytes(), cached.fileName());
+    }
+
+    private ReconcileExportResponse persistReconcileExport(byte[] outputBytes, String downloadName)
+            throws IOException {
+        ExportMode exportMode = exportSettingsService.getCurrentMode();
+        LocalDate exportDate = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        if (exportMode == ExportMode.SERVER_DIRECTORY) {
+            List<String> exportedFiles =
+                    merchantSplitExportService.writeReconcileFile(
+                            exportDate, downloadName, outputBytes);
+            return new ReconcileExportResponse(
+                    exportedFiles.size(), exportedFiles, exportMode, null, exportDate.toString());
+        }
+        String exportDownloadToken = exportDownloadCacheService.store(downloadName, outputBytes);
+        return new ReconcileExportResponse(
+                1, List.of(), exportMode, exportDownloadToken, exportDate.toString());
     }
 
     /**

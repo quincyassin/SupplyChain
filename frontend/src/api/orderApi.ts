@@ -1038,6 +1038,14 @@ export interface ReconcileExportPayload {
   platform?: string;
 }
 
+export interface ReconcileExportResult {
+  exportedFileCount: number;
+  exportedFiles: string[];
+  exportMode: ExportMode;
+  exportDownloadToken?: string | null;
+  exportDate?: string | null;
+}
+
 export interface AfterSalesExportPayload {
   startDate: string;
   endDate: string;
@@ -1061,14 +1069,62 @@ async function downloadExcelExport(path: string, body: unknown): Promise<Blob> {
 
 export async function exportMerchantReconcile(
   payload: ReconcileExportPayload,
-): Promise<Blob> {
-  return downloadExcelExport("/export/reconcile/merchant", payload);
+): Promise<ReconcileExportResult> {
+  try {
+    const { data } = await client.post<ReconcileExportResult>(
+      "/export/reconcile/merchant",
+      payload,
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
 }
 
 export async function exportPlatformReconcile(
   payload: ReconcileExportPayload,
+): Promise<ReconcileExportResult> {
+  try {
+    const { data } = await client.post<ReconcileExportResult>(
+      "/export/reconcile/platform",
+      payload,
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function downloadReconcileExport(
+  downloadToken: string,
 ): Promise<Blob> {
-  return downloadExcelExport("/export/reconcile/platform", payload);
+  try {
+    const response = await client.get("/export/reconcile", {
+      params: { downloadToken },
+      responseType: "blob",
+    });
+    const contentType = String(response.headers["content-type"] ?? "");
+    if (contentType.includes("application/json")) {
+      const text = await (response.data as Blob).text();
+      const json = JSON.parse(text) as ApiErrorBody;
+      throw new Error(json.message ?? "导出失败");
+    }
+    return response.data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function openReconcileExportDirectory(
+  exportDate: string,
+): Promise<void> {
+  try {
+    await client.post("/export/open-reconcile-directory", null, {
+      params: { exportDate },
+    });
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
 }
 
 export async function exportAfterSalesOrders(
