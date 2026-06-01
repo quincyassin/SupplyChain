@@ -12,3 +12,6 @@ spring:
 app:
   cors:
     allowed-origins: http://localhost:5173
+  license:
+    enforced: false
+    file-path: ./target/test-license/license.dat

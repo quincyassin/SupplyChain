@@ -203,7 +203,7 @@ public class OrderController {
     }
 
     /**
-     * 上传导入：仅匹配平台并入库（商家为未定义）
+     * 上传导入：匹配平台并按商家关键字分单入库（不导出 Excel）
      */
     @PostMapping("/import")
     public ResponseEntity<SplitResultResponse> importOrders(

@@ -1,8 +1,10 @@
 package com.ecommerce.ordersplit.controller;
 
 import com.ecommerce.ordersplit.dto.SplitResultResponse;
+import com.ecommerce.ordersplit.service.LicenseService;
 import com.ecommerce.ordersplit.service.OrderProcessService;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -29,6 +31,14 @@ class OrderControllerTest {
 
   @MockBean
   private OrderProcessService orderProcessService;
+
+  @MockBean
+  private LicenseService licenseService;
+
+  @BeforeEach
+  void setUpLicense() {
+    when(licenseService.isLicensed()).thenReturn(true);
+  }
 
   @Test
   void split_shouldReturnJson() throws Exception {

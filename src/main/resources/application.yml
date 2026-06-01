@@ -29,3 +29,6 @@ server:
 app:
   cors:
     allowed-origins: http://localhost:5173
+  license:
+    enforced: true
+    file-path: ./data/license/license.dat

@@ -8,3 +8,5 @@ frontend/dist/
 *.log
 release/
 packaging/jre-cache/
+license-keys/
+**/license-private.pem

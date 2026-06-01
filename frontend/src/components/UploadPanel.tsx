@@ -415,34 +415,27 @@ function pickDefaultMerchant(
   return ALL_MERCHANT_TAB_KEY;
 }
 
-/** 首页商家 Tab：仅展示订单中已有商家（按商家分单后新增，未定义有待分单时展示） */
+/** 首页商家 Tab：仅展示当前平台筛选下有订单的商家 */
 function buildMerchantGroupsForTabs(
   merchantGroups: MerchantSplitGroup[],
-  activeMerchant: string,
 ): MerchantSplitGroup[] {
-  const countByMerchant = new Map<
-    string,
-    { rowCount: number; receiptedCount: number }
-  >();
-  for (const group of merchantGroups) {
-    countByMerchant.set(group.merchant, {
-      rowCount: group.rowCount ?? 0,
-      receiptedCount: group.receiptedCount ?? 0,
-    });
-  }
-
   const groups: MerchantSplitGroup[] = [];
-  const pendingCounts = countByMerchant.get(PENDING_SPLIT_MERCHANT);
-  if (pendingCounts != null && pendingCounts.rowCount > 0) {
+  const pendingGroup = merchantGroups.find(
+    (group) => group.merchant === PENDING_SPLIT_MERCHANT,
+  );
+  if (pendingGroup != null && (pendingGroup.rowCount ?? 0) > 0) {
     groups.push({
       merchant: PENDING_SPLIT_MERCHANT,
-      rowCount: pendingCounts.rowCount,
-      receiptedCount: pendingCounts.receiptedCount,
+      rowCount: pendingGroup.rowCount ?? 0,
+      receiptedCount: pendingGroup.receiptedCount ?? 0,
       rows: [],
     });
   }
   for (const group of merchantGroups) {
     if (group.merchant === PENDING_SPLIT_MERCHANT) {
+      continue;
+    }
+    if ((group.rowCount ?? 0) <= 0) {
       continue;
     }
     groups.push({
@@ -452,24 +445,20 @@ function buildMerchantGroupsForTabs(
       rows: [],
     });
   }
-  if (
-    activeMerchant !== ALL_MERCHANT_TAB_KEY &&
-    activeMerchant !== "" &&
-    activeMerchant !== PENDING_SPLIT_MERCHANT &&
-    !groups.some((group) => group.merchant === activeMerchant)
-  ) {
-    const counts = countByMerchant.get(activeMerchant) ?? {
-      rowCount: 0,
-      receiptedCount: 0,
-    };
-    groups.push({
-      merchant: activeMerchant,
-      rowCount: counts.rowCount,
-      receiptedCount: counts.receiptedCount,
-      rows: [],
-    });
-  }
   return groups;
+}
+
+function merchantHasRowsUnderPlatform(
+  rows: SplitTableRow[],
+  platform: string | null,
+  merchant: string,
+): boolean {
+  if (merchant === ALL_MERCHANT_TAB_KEY || merchant === "") {
+    return true;
+  }
+  return filterRowsByPlatform(rows, platform).some(
+    (row) => resolveRowMerchantName(row.merchant) === merchant,
+  );
 }
 
 function isSelectableSplitDate(value: Dayjs): boolean {
@@ -1364,16 +1353,13 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
 
   const deferredDisplayPageRows = useDeferredValue(displayPageRows);
 
-  /** 商家 Tab：未定义（有待分单订单时）+ 分单后订单中已有的商家 */
+  /** 商家 Tab：当前平台下有订单的商家（含未定义） */
   const merchantGroupsForTabs = useMemo(() => {
     if (!splitResult) {
       return [];
     }
-    return buildMerchantGroupsForTabs(
-      splitResult.merchantGroups,
-      activeMerchant,
-    );
-  }, [splitResult, activeMerchant]);
+    return buildMerchantGroupsForTabs(splitResult.merchantGroups);
+  }, [splitResult]);
 
   const merchantSplitTargets = useMemo((): MerchantSplitTargetItem[] => {
     if (!merchantGroupsForTabs.length) {
@@ -1400,8 +1386,26 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     );
     if (activeMerchant === PENDING_SPLIT_MERCHANT && !hasPendingTab) {
       setActiveMerchant(ALL_MERCHANT_TAB_KEY);
+      activeMerchantRef.current = ALL_MERCHANT_TAB_KEY;
+      return;
     }
-  }, [merchantGroupsForTabs, activeMerchant]);
+    if (
+      orderDataset &&
+      !merchantHasRowsUnderPlatform(
+        orderDataset.pageRows ?? [],
+        filterPlatform,
+        activeMerchant,
+      )
+    ) {
+      setActiveMerchant(ALL_MERCHANT_TAB_KEY);
+      activeMerchantRef.current = ALL_MERCHANT_TAB_KEY;
+    }
+  }, [
+    merchantGroupsForTabs,
+    activeMerchant,
+    orderDataset,
+    filterPlatform,
+  ]);
 
   const clearSelectedRows = useCallback(() => {
     setSelectedSystemNos([]);
@@ -1502,15 +1506,30 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     [applySplitResult],
   );
 
-  const handleSelectFilterPlatform = useCallback((platform: string | null) => {
-    filterPlatformRef.current = platform;
-    setSelectedSystemNos([]);
-    tablePageRef.current = 1;
-    setTablePage(1);
-    startTransition(() => {
-      setFilterPlatform(platform);
-    });
-  }, []);
+  const handleSelectFilterPlatform = useCallback(
+    (platform: string | null) => {
+      filterPlatformRef.current = platform;
+      const currentMerchant = activeMerchantRef.current;
+      if (
+        orderDataset &&
+        !merchantHasRowsUnderPlatform(
+          orderDataset.pageRows ?? [],
+          platform,
+          currentMerchant,
+        )
+      ) {
+        activeMerchantRef.current = ALL_MERCHANT_TAB_KEY;
+        setActiveMerchant(ALL_MERCHANT_TAB_KEY);
+      }
+      setSelectedSystemNos([]);
+      tablePageRef.current = 1;
+      setTablePage(1);
+      startTransition(() => {
+        setFilterPlatform(platform);
+      });
+    },
+    [orderDataset],
+  );
 
   const reloadCurrentRange = useCallback(
     async (preserveFilters = true) => {
@@ -1669,12 +1688,10 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
       applySplitResult(imported);
       if (result.matchedPlatform) {
         message.success(
-          `已导入 ${imported.totalRows} 条（平台：${result.matchedPlatform}），请点击「按商家分单」`,
+          `已导入 ${imported.totalRows} 条并按商家分单（平台：${result.matchedPlatform}）`,
         );
       } else {
-        message.success(
-          `已导入 ${imported.totalRows} 条，请点击「按商家分单」`,
-        );
+        message.success(`已导入 ${imported.totalRows} 条并按商家分单`);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "读取表头失败";
@@ -2915,7 +2932,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                       ? "当前筛选条件下暂无订单"
                       : splitResult
                         ? `${splitResult.issueDate} 暂无订单，可上传 Excel 分单`
-                        : "上传 Excel 后，自动匹配平台模板解析，再按商品名称关键字归入各商家"
+                        : "上传 Excel 后，将自动匹配平台模板并按商家关键字分单入库"
                   }
                 />
               </div>

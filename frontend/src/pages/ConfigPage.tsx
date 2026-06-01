@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, Layout, Menu, Typography } from "antd";
 import {
   SettingOutlined,
@@ -6,11 +6,14 @@ import {
   TableOutlined,
   ExportOutlined,
   ApartmentOutlined,
+  SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import HeaderMappingConfig from "../components/HeaderMappingConfig";
 import FieldMappingPanel from "../components/FieldMappingPanel";
 import MerchantConfigPanel from "../components/MerchantConfigPanel";
 import ExportSettingsPanel from "../components/ExportSettingsPanel";
+import LicensePanel from "../components/LicensePanel";
+import type { LicenseStatus } from "../api/licenseApi";
 
 const { Sider, Content } = Layout;
 const { Title } = Typography;
@@ -19,7 +22,13 @@ type ConfigMenuKey =
   | "header-mapping"
   | "field-mapping"
   | "merchant-config"
-  | "export-settings";
+  | "export-settings"
+  | "license";
+
+interface ConfigPageProps {
+  initialKey?: ConfigMenuKey;
+  onLicenseActivated?: (status: LicenseStatus) => void;
+}
 
 const menuItems = [
   {
@@ -42,6 +51,11 @@ const menuItems = [
     icon: <ExportOutlined />,
     label: "导出配置",
   },
+  {
+    key: "license",
+    icon: <SafetyCertificateOutlined />,
+    label: "软件授权",
+  },
 ];
 
 const menuTitles: Record<ConfigMenuKey, string> = {
@@ -49,10 +63,17 @@ const menuTitles: Record<ConfigMenuKey, string> = {
   "field-mapping": "字段映射",
   "merchant-config": "商家配置",
   "export-settings": "导出配置",
+  license: "软件授权",
 };
 
-export default function ConfigPage() {
-  const [activeKey, setActiveKey] = useState<ConfigMenuKey>("header-mapping");
+export default function ConfigPage({ initialKey, onLicenseActivated }: ConfigPageProps) {
+  const [activeKey, setActiveKey] = useState<ConfigMenuKey>(initialKey ?? "header-mapping");
+
+  useEffect(() => {
+    if (initialKey) {
+      setActiveKey(initialKey);
+    }
+  }, [initialKey]);
 
   return (
     <Layout className="config-layout">
@@ -76,6 +97,9 @@ export default function ConfigPage() {
           {activeKey === "field-mapping" && <FieldMappingPanel />}
           {activeKey === "merchant-config" && <MerchantConfigPanel />}
           {activeKey === "export-settings" && <ExportSettingsPanel />}
+          {activeKey === "license" && (
+            <LicensePanel onLicenseActivated={onLicenseActivated} />
+          )}
         </Card>
       </Content>
     </Layout>

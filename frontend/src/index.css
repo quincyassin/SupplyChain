@@ -16,6 +16,20 @@ body {
   overflow: hidden;
 }
 
+.license-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: #eef1f6;
+}
+
+.license-card {
+  width: min(640px, 100%);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
 .app-layout {
   height: 100vh;
   background: #eef1f6;
@@ -37,6 +51,10 @@ body {
   justify-content: space-between;
   height: 48px;
   line-height: 48px;
+}
+
+.app-license-banner {
+  flex-shrink: 0;
 }
 
 .app-top-menu {

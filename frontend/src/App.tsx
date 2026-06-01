@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Layout, Menu, Typography } from "antd";
+import { useCallback, useEffect, useState } from "react";
+import { Alert, Layout, Menu, Spin, Typography } from "antd";
 import {
   AccountBookOutlined,
   CustomerServiceOutlined,
@@ -10,6 +10,7 @@ import OrderPage from "./pages/OrderPage";
 import AfterSalesPage from "./pages/AfterSalesPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import ConfigPage from "./pages/ConfigPage";
+import { fetchLicenseStatus, type LicenseStatus } from "./api/licenseApi";
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
@@ -18,6 +19,43 @@ type AppMenuKey = "orders" | "reconcile" | "after-sales" | "config";
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<AppMenuKey>("orders");
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
+  const [licenseLoading, setLicenseLoading] = useState(true);
+
+  const loadLicenseStatus = useCallback(async () => {
+    setLicenseLoading(true);
+    try {
+      const status = await fetchLicenseStatus();
+      setLicenseStatus(status);
+      if (status.enforced && !status.licensed) {
+        setActiveMenu("config");
+      }
+      return status;
+    } catch {
+      setLicenseStatus(null);
+      return null;
+    } finally {
+      setLicenseLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadLicenseStatus();
+  }, [loadLicenseStatus]);
+
+  const handleActivated = useCallback((status: LicenseStatus) => {
+    setLicenseStatus(status);
+  }, []);
+
+  const needActivate = Boolean(licenseStatus?.enforced && !licenseStatus.licensed);
+
+  if (licenseLoading) {
+    return (
+      <div className="license-page">
+        <Spin size="large" tip="正在检查授权状态..." />
+      </div>
+    );
+  }
 
   return (
     <Layout className="app-layout">
@@ -42,6 +80,15 @@ export default function App() {
           onClick={({ key }) => setActiveMenu(key as AppMenuKey)}
         />
       </Header>
+      {needActivate ? (
+        <Alert
+          className="app-license-banner"
+          type="warning"
+          showIcon
+          banner
+          message="软件尚未激活，请前往「系统配置 → 软件授权」输入激活码"
+        />
+      ) : null}
       <Content
         className={
           activeMenu === "config"
@@ -52,7 +99,12 @@ export default function App() {
         {activeMenu === "orders" && <OrderPage />}
         {activeMenu === "reconcile" && <ReconcilePage />}
         {activeMenu === "after-sales" && <AfterSalesPage />}
-        {activeMenu === "config" && <ConfigPage />}
+        {activeMenu === "config" && (
+          <ConfigPage
+            initialKey={needActivate ? "license" : undefined}
+            onLicenseActivated={handleActivated}
+          />
+        )}
       </Content>
     </Layout>
   );

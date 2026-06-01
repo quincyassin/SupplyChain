@@ -331,19 +331,14 @@ public class OrderProcessService {
     }
 
     /**
-     * 上传导入：仅匹配平台并入库（商家为「未定义」，不按关键字分单）
+     * 上传导入：匹配平台并按商家关键字分单入库（不导出 Excel）
      */
     @Transactional
     public SplitResultResponse importByPlatform(MultipartFile file, String mappingJson) {
-        ProcessTask task = createTask(file.getOriginalFilename(), OperationType.SPLIT);
-        task.setStatus(TaskStatus.PROCESSING);
-        processTaskRepository.save(task);
-
-        ImportExecution execution = executeImport(file, mappingJson, task);
-        completeImportTask(task, execution);
-
-        return importOrderQueryService.listOrdersByDate(
-                LocalDate.now(ZoneId.of("Asia/Shanghai")), task.getId());
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请上传 Excel 文件");
+        }
+        return splitByMerchant(file, mappingJson);
     }
 
     public AssignMerchantResult assignPendingMerchantsForRange(
@@ -780,39 +775,6 @@ public class OrderProcessService {
         return platform.trim();
     }
 
-    private ImportExecution executeImport(
-            MultipartFile file, String mappingJson, ProcessTask task) {
-        ParsedImportExcel parsed =
-                excelParserService.parseImportOnce(
-                        file, platformMappingTemplateService::matchByHeaders, false);
-        List<OrderRow> inputRows = parsed.rows();
-        Map<String, List<OrderRow>> pendingBucket = new LinkedHashMap<>();
-        pendingBucket.put(MerchantConfigService.PENDING_SPLIT_MERCHANT, inputRows);
-
-        LocalDateTime issueDateTime = dailyTableService.currentIssueDateTime();
-        int savedCount =
-                importOrderPersistenceService.saveSplitOrders(
-                        task.getId(), parsed.platform(), pendingBucket, issueDateTime);
-
-        String issueDateText = dailyTableService.formatIssueDate(issueDateTime);
-        return new ImportExecution(
-                inputRows.size(), savedCount, parsed.platform(), issueDateText);
-    }
-
-    private void completeImportTask(ProcessTask task, ImportExecution execution) {
-        task.setInputRowCount(execution.inputRowCount());
-        task.setMerchantGroupCount(0);
-        task.setOutputRowCount(execution.batchRowCount());
-        task.setStatus(TaskStatus.SUCCESS);
-        task.setMessage(
-                "已导入 "
-                        + execution.batchRowCount()
-                        + " 行（平台："
-                        + execution.platform()
-                        + "），请点击「按商家分单」");
-        processTaskRepository.save(task);
-    }
-
     private SplitExecution executeSplit(
             MultipartFile file, String mappingJson, ProcessTask task) {
         merchantConfigService.ensureConfigured();
@@ -821,19 +783,15 @@ public class OrderProcessService {
                 excelParserService.parseImportOnce(
                         file, platformMappingTemplateService::matchByHeaders, false);
         List<OrderRow> inputRows = parsed.rows();
-        int unmatchedCount = 0;
+        int pendingMerchantRowCount = 0;
         for (OrderRow row : inputRows) {
             String merchant = merchantConfigService.resolveByProductName(row.getProductName());
-            row.setMerchant(merchant);
             if (MerchantConfigService.UNMATCHED_MERCHANT_NAME.equals(merchant)) {
-                unmatchedCount++;
+                row.setMerchant(MerchantConfigService.PENDING_SPLIT_MERCHANT);
+                pendingMerchantRowCount++;
+            } else {
+                row.setMerchant(merchant);
             }
-        }
-        if (unmatchedCount > 0) {
-            throw new BusinessException(
-                    "有 "
-                            + unmatchedCount
-                            + " 行商品名称未匹配到任何商家关键字，请检查「系统配置 → 商家配置」或 Excel 中的名称列");
         }
 
         Map<String, List<OrderRow>> splitResult = orderSplitMergeService.splitByMerchant(inputRows);
@@ -844,7 +802,8 @@ public class OrderProcessService {
                         task.getId(), parsed.platform(), splitResult, issueDateTime);
 
         String issueDateText = dailyTableService.formatIssueDate(issueDateTime);
-        return new SplitExecution(inputRows.size(), savedCount, splitResult.size(), issueDateText);
+        return new SplitExecution(
+                inputRows.size(), savedCount, splitResult.size(), issueDateText, pendingMerchantRowCount);
     }
 
     private void completeTask(ProcessTask task, SplitExecution execution) {
@@ -852,11 +811,18 @@ public class OrderProcessService {
         task.setMerchantGroupCount(execution.batchMerchantCount());
         task.setOutputRowCount(execution.batchRowCount());
         task.setStatus(TaskStatus.SUCCESS);
-        task.setMessage(
+        String message =
                 "本次导入 "
                         + execution.batchRowCount()
                         + " 行已追加入库（当日累计请查看列表），发单时间 "
-                        + execution.issueDateText());
+                        + execution.issueDateText();
+        if (execution.pendingMerchantRowCount() > 0) {
+            message +=
+                    "，其中 "
+                            + execution.pendingMerchantRowCount()
+                            + " 行未匹配商家关键字，已归入未定义";
+        }
+        task.setMessage(message);
         processTaskRepository.save(task);
     }
 
@@ -902,10 +868,11 @@ public class OrderProcessService {
     }
 
     private record SplitExecution(
-            int inputRowCount, int batchRowCount, int batchMerchantCount, String issueDateText) {
+            int inputRowCount,
+            int batchRowCount,
+            int batchMerchantCount,
+            String issueDateText,
+            int pendingMerchantRowCount) {
     }
 
-    private record ImportExecution(
-            int inputRowCount, int batchRowCount, String platform, String issueDateText) {
-    }
 }
