@@ -25,11 +25,8 @@ if not exist "%JAR_FILE%" (
 if not exist "%DATA_DIR%" mkdir "%DATA_DIR%"
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
-powershell -NoProfile -Command "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:8080' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }" >nul 2>&1
-if %ERRORLEVEL%==0 (
-    start "" "http://localhost:8080"
-    exit /b 0
-)
+REM 升级安装后必须先停旧进程，否则 8080 仍由旧 JAR 提供服务
+call "%~dp0stop.bat" >nul 2>&1
 
 start "" "%JAVA_EXE%" -Dspring.profiles.active=standalone -jar "%JAR_FILE%"
 

@@ -44,3 +44,19 @@ Filename: "{app}\start.bat"; Description: "Launch OrderSplitMerge"; Flags: nowai
 
 [UninstallRun]
 Filename: "{app}\stop.bat"; Flags: runhidden waituntilterminated skipifdoesntexist
+
+[Code]
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+  StopBat: String;
+begin
+  if CurStep = ssInstall then
+  begin
+    StopBat := ExpandConstant('{app}\stop.bat');
+    if FileExists(StopBat) then
+    begin
+      Exec(StopBat, '', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+  end;
+end;
