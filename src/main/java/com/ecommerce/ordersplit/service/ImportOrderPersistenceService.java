@@ -268,7 +268,6 @@ public class ImportOrderPersistenceService {
     @Transactional
     public AssignMerchantPersistenceResult assignPendingMerchantsInRange(
             LocalDate startDate, LocalDate endDate) {
-        merchantConfigService.ensureConfigured();
         if (startDate.isAfter(endDate)) {
             throw new BusinessException("开始日期不能晚于结束日期");
         }

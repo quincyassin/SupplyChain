@@ -98,14 +98,6 @@ class MerchantConfigServiceTest {
   }
 
   @Test
-  void ensureConfigured_shouldRequireAnyMerchant() {
-    when(merchantConfigRepository.count()).thenReturn(0L);
-    org.junit.jupiter.api.Assertions.assertThrows(
-        com.ecommerce.ordersplit.exception.BusinessException.class,
-        () -> service.ensureConfigured());
-  }
-
-  @Test
   void ensureManualMerchant_shouldSkipPendingName() {
     service.ensureManualMerchant(MerchantConfigService.PENDING_SPLIT_MERCHANT);
     org.mockito.Mockito.verify(merchantConfigRepository, org.mockito.Mockito.never())

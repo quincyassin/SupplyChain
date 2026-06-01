@@ -358,7 +358,6 @@ public class OrderProcessService {
             LocalDate endDate,
             List<String> platforms,
             List<String> merchants) {
-        merchantConfigService.ensureConfigured();
         LocalDate normalizedStart = importOrderQueryService.requireRecentDate(startDate);
         LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
         if (normalizedStart.isAfter(normalizedEnd)) {
@@ -804,8 +803,6 @@ public class OrderProcessService {
 
     private SplitExecution executeSplit(
             MultipartFile file, String mappingJson, ProcessTask task) {
-        merchantConfigService.ensureConfigured();
-
         ParsedImportExcel parsed =
                 excelParserService.parseImportOnce(
                         file, platformMappingTemplateService::matchByHeaders, false);

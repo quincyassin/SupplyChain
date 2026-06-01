@@ -319,21 +319,9 @@ public class ColumnMappingService {
                     merged.setSourceIndex(-1);
                     merged.setEnabled(false);
                 } else if (savedIndex >= 0 && columnExistsInTemplate(templateHeaders, savedIndex)) {
-                    if (columnIndexMatchesField(
-                            templateHeaders, savedIndex, suggestedItem.getFieldKey())) {
-                        merged.setSourceIndex(savedIndex);
-                        merged.setEnabled(true);
-                    } else if (suggestedItem.isEnabled()
-                            && suggestedItem.getSourceIndex() >= 0
-                            && suggestedItem.getSourceIndex() != savedIndex) {
-                        // 已保存列索引与字段不匹配，但能在其它列按表头自动匹配时修正
-                        merged.setSourceIndex(suggestedItem.getSourceIndex());
-                        merged.setEnabled(true);
-                    } else {
-                        // 用户手动映射到非标准表头，保留列索引
-                        merged.setSourceIndex(savedIndex);
-                        merged.setEnabled(true);
-                    }
+                    // 用户已启用的有效列索引以保存配置为准，避免改绑后被表头自动匹配覆盖
+                    merged.setSourceIndex(savedIndex);
+                    merged.setEnabled(true);
                 } else if (suggestedItem.isEnabled() && suggestedItem.getSourceIndex() >= 0) {
                     merged.setSourceIndex(suggestedItem.getSourceIndex());
                     merged.setEnabled(true);

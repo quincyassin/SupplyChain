@@ -53,6 +53,18 @@ function applyColumnFieldChange(
           }
         : item,
     );
+    // 同一字段改绑到新列时，解除其它字段对该列的占用
+    next = next.map((item) =>
+      item.fieldKey !== fieldKey &&
+      item.enabled &&
+      item.sourceIndex === columnIndex
+        ? {
+            ...item,
+            sourceIndex: UNMAPPED_COLUMN_INDEX,
+            enabled: false,
+          }
+        : item,
+    );
   }
 
   return next;
@@ -97,7 +109,7 @@ export default function HeaderMappingPanel({
 
   useEffect(() => {
     setActiveColumns(collectActiveColumnIndexes(completeMapping));
-  }, [excelHeaders]);
+  }, [mapping, excelHeaders]);
 
   const rows = useMemo(() => {
     return excelHeaders.map((header) => {
@@ -150,7 +162,26 @@ export default function HeaderMappingPanel({
 
   const updateColumnField = (columnIndex: number, fieldKey: string | null) => {
     if (fieldKey) {
-      setActiveColumns((prev) => new Set(prev).add(columnIndex));
+      const previousIndex = mapping.find(
+        (item) =>
+          item.fieldKey === fieldKey &&
+          item.enabled &&
+          item.sourceIndex >= 0,
+      )?.sourceIndex;
+      setActiveColumns((prev) => {
+        const next = new Set(prev);
+        next.add(columnIndex);
+        if (previousIndex != null && previousIndex !== columnIndex) {
+          next.delete(previousIndex);
+        }
+        return next;
+      });
+    } else {
+      setActiveColumns((prev) => {
+        const next = new Set(prev);
+        next.delete(columnIndex);
+        return next;
+      });
     }
     onChange(
       applyColumnFieldChange(

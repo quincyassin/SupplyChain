@@ -274,7 +274,30 @@ class ColumnMappingServiceTest {
     }
 
     @Test
-    void mergePlatformMapping_shouldFallbackWhenSavedIndexPointsToWrongHeader() {
+    void mergePlatformMapping_shouldPreserveUserRemapWhenAutoMatchExistsOnAnotherColumn() {
+        List<ColumnMappingItemDto> saved =
+                List.of(
+                        createMappingDto("orderNo", 0, true, 0),
+                        createMappingDto("productName", 2, true, 2));
+        List<ExcelHeaderDto> headers =
+                List.of(
+                        new ExcelHeaderDto(0, "订单编号"),
+                        new ExcelHeaderDto(1, "商品名称"),
+                        new ExcelHeaderDto(2, "商品标题"));
+
+        List<ColumnMappingItemDto> merged = service.mergePlatformMapping(saved, headers);
+
+        ColumnMappingItemDto productName =
+                merged.stream()
+                        .filter(item -> "productName".equals(item.getFieldKey()))
+                        .findFirst()
+                        .orElseThrow();
+        assertEquals(2, productName.getSourceIndex().intValue());
+        assertEquals(true, productName.getEnabled());
+    }
+
+    @Test
+    void mergePlatformMapping_shouldKeepSavedIndexWhenHeaderNameDoesNotMatchField() {
         List<ColumnMappingItemDto> saved =
                 List.of(
                         createMappingDto("orderNo", 0, true, 0),
@@ -292,7 +315,7 @@ class ColumnMappingServiceTest {
                         .filter(item -> "sku".equals(item.getFieldKey()))
                         .findFirst()
                         .orElseThrow();
-        assertEquals(2, sku.getSourceIndex().intValue());
+        assertEquals(1, sku.getSourceIndex().intValue());
         assertEquals(true, sku.getEnabled());
     }
 

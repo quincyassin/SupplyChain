@@ -2923,7 +2923,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                       ? "当前筛选条件下暂无订单"
                       : splitResult
                         ? `${splitResult.issueDate} 暂无订单，可上传 Excel 分单`
-                        : "上传 Excel 后，将自动匹配平台模板并按商家关键字分单入库"
+                        : "上传 Excel 后将自动匹配平台模板并入库；未匹配商家关键字时归入「未定义」"
                   }
                 />
               </div>

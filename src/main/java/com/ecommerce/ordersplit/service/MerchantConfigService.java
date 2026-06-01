@@ -41,13 +41,6 @@ public class MerchantConfigService {
         .toList();
   }
 
-  @Transactional(readOnly = true)
-  public void ensureConfigured() {
-    if (merchantConfigRepository.count() == 0) {
-      throw new BusinessException("请先在商家表中维护至少一个商家");
-    }
-  }
-
   /**
    * 表格手工指定商家时，确保 merchant_config 中存在对应记录（HIDDEN，不在配置页展示）
    */
