@@ -255,7 +255,7 @@ class ExcelWriterServiceTest {
     try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
       var headerRow = workbook.getSheetAt(0).getRow(0);
       assertEquals("成本价", headerRow.getCell(12).getStringCellValue());
-      assertEquals("总计", headerRow.getCell(13).getStringCellValue());
+      assertEquals("总价", headerRow.getCell(13).getStringCellValue());
       assertEquals(16, headerRow.getPhysicalNumberOfCells());
       var dataRow = workbook.getSheetAt(0).getRow(1);
       assertEquals(12.5, dataRow.getCell(12).getNumericCellValue(), 0.001);
@@ -298,7 +298,7 @@ class ExcelWriterServiceTest {
     try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
       var headerRow = workbook.getSheetAt(0).getRow(0);
       assertEquals("供货价", headerRow.getCell(2).getStringCellValue());
-      assertEquals("总计", headerRow.getCell(3).getStringCellValue());
+      assertEquals("总价", headerRow.getCell(3).getStringCellValue());
       var dataRow = workbook.getSheetAt(0).getRow(1);
       assertEquals(10.0, dataRow.getCell(2).getNumericCellValue(), 0.001);
       assertEquals(35.0, dataRow.getCell(3).getNumericCellValue(), 0.001);

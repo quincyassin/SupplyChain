@@ -88,7 +88,7 @@ public class ExcelWriterService {
             "分单日期"
     };
 
-    /** 商家对账：不含平台/商家/供货价，含成本价、总计 */
+    /** 商家对账：不含平台/商家/供货价，含成本价、总价 */
     private static final String[] MERCHANT_RECONCILE_HEADERS = {
             "回单状态",
             "系统编号",
@@ -103,12 +103,12 @@ public class ExcelWriterService {
             "收货人地址",
             "运费",
             "成本价",
-            "总计",
+            "总价",
             "备注",
             "分单日期"
     };
 
-    private static final String RECONCILE_TOTAL_HEADER = "总计";
+    private static final String RECONCILE_TOTAL_HEADER = "总价";
     private static final String PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER = "供货价";
 
     /**
@@ -174,7 +174,7 @@ public class ExcelWriterService {
     }
 
     /**
-     * 平台对账导出（按平台模板列 + 末尾追加供货价、总计）
+     * 平台对账导出（按平台模板列 + 末尾追加供货价、总价）
      */
     public byte[] writePlatformReconcileTable(
             String platformKey,
