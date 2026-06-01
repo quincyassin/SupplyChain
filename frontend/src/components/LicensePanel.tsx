@@ -5,6 +5,7 @@ import {
   Descriptions,
   Divider,
   Space,
+  Spin,
   Typography,
   message,
 } from "antd";
@@ -74,33 +75,35 @@ export default function LicensePanel({
         />
       ) : null}
 
-      <Descriptions bordered size="small" column={1} loading={loading}>
-        <Descriptions.Item label="授权状态">
-          {status?.licensed ? "已激活" : "未激活"}
-        </Descriptions.Item>
-        <Descriptions.Item label="平台">
-          {status?.platform ?? "-"}
-        </Descriptions.Item>
-        <Descriptions.Item label="用户编号">
-          <Space>
-            <Text code>{status?.machineIdDisplay ?? "-"}</Text>
-            <Button
-              size="small"
-              icon={<CopyOutlined />}
-              disabled={!status?.machineIdDisplay}
-              onClick={() => void handleCopyMachineId()}
-            >
-              复制
-            </Button>
-          </Space>
-        </Descriptions.Item>
-        <Descriptions.Item label="到期日">
-          {status?.expireAt ?? "-"}
-        </Descriptions.Item>
-        <Descriptions.Item label="剩余天数">
-          {status?.remainingDays != null ? `${status.remainingDays} 天` : "-"}
-        </Descriptions.Item>
-      </Descriptions>
+      <Spin spinning={loading}>
+        <Descriptions bordered size="small" column={1}>
+          <Descriptions.Item label="授权状态">
+            {status?.licensed ? "已激活" : "未激活"}
+          </Descriptions.Item>
+          <Descriptions.Item label="平台">
+            {status?.platform ?? "-"}
+          </Descriptions.Item>
+          <Descriptions.Item label="用户编号">
+            <Space>
+              <Text code>{status?.machineIdDisplay ?? "-"}</Text>
+              <Button
+                size="small"
+                icon={<CopyOutlined />}
+                disabled={!status?.machineIdDisplay}
+                onClick={() => void handleCopyMachineId()}
+              >
+                复制
+              </Button>
+            </Space>
+          </Descriptions.Item>
+          <Descriptions.Item label="到期日">
+            {status?.expireAt ?? "-"}
+          </Descriptions.Item>
+          <Descriptions.Item label="剩余天数">
+            {status?.remainingDays != null ? `${status.remainingDays} 天` : "-"}
+          </Descriptions.Item>
+        </Descriptions>
+      </Spin>
 
       <Divider orientation="left" plain>
         {status?.licensed ? "更新激活码" : "输入激活码"}

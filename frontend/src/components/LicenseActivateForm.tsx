@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Button, Input, Space, Typography, message } from "antd";
+import { Button, Input, Space, Typography, message } from "antd";
 import { activateLicense, type LicenseStatus } from "../api/licenseApi";
 
 const { Text } = Typography;
