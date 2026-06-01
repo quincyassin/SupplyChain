@@ -32,12 +32,13 @@ class ExportSettingsServiceTest {
     Path tempDir;
 
     @Mock private ExportSettingsRepository exportSettingsRepository;
+    @Mock private FolderPickerService folderPickerService;
 
     private ExportSettingsService service;
 
     @BeforeEach
     void setUp() {
-        service = new ExportSettingsService(exportSettingsRepository);
+        service = new ExportSettingsService(exportSettingsRepository, folderPickerService);
     }
 
     @Test

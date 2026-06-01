@@ -852,6 +852,22 @@ export async function saveExportSettings(payload: {
   }
 }
 
+export interface PickExportDirectoryResult {
+  cancelled: boolean;
+  directory?: string | null;
+}
+
+export async function pickExportDirectory(): Promise<PickExportDirectoryResult> {
+  try {
+    const { data } = await client.post<PickExportDirectoryResult>(
+      "/export-settings/pick-directory",
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
 export interface ReceiptExportResult {
   exportedFileCount: number;
   exportedFiles: string[];

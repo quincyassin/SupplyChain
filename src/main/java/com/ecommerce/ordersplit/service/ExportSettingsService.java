@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.dto.ExportSettingsDto;
+import com.ecommerce.ordersplit.dto.PickExportDirectoryResponse;
 import com.ecommerce.ordersplit.dto.SaveExportSettingsRequest;
 import com.ecommerce.ordersplit.entity.ExportSettings;
 import com.ecommerce.ordersplit.exception.BusinessException;
@@ -9,6 +10,7 @@ import com.ecommerce.ordersplit.repository.ExportSettingsRepository;
 import com.ecommerce.ordersplit.util.ExportPathHelper;
 import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,6 +28,7 @@ public class ExportSettingsService {
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final ExportSettingsRepository exportSettingsRepository;
+    private final FolderPickerService folderPickerService;
 
     @Transactional(readOnly = true)
     public ExportSettingsDto getSettings() {
@@ -65,6 +68,38 @@ public class ExportSettingsService {
         }
         exportSettingsRepository.save(settings);
         return toDto(settings);
+    }
+
+    /**
+     * 弹出本机文件夹选择器，返回选中的导出根目录（不自动保存，由前端确认后调用 save）
+     */
+    @Transactional(readOnly = true)
+    public PickExportDirectoryResponse pickExportDirectory() {
+        Path initialDirectory = resolveInitialPickDirectory();
+        Optional<Path> picked =
+                folderPickerService.pickDirectory(initialDirectory, "选择导出根目录");
+        if (picked.isEmpty()) {
+            return new PickExportDirectoryResponse(true, null);
+        }
+        Path normalized = ExportPathHelper.normalizeExportRoot(picked.get().toString());
+        ExportPathHelper.ensureExportRootWritable(normalized);
+        return new PickExportDirectoryResponse(false, normalized.toString());
+    }
+
+    private Path resolveInitialPickDirectory() {
+        ExportSettings settings = loadOrCreate();
+        if (settings.getExportDirectory() != null && !settings.getExportDirectory().isBlank()) {
+            try {
+                Path configured =
+                        ExportPathHelper.normalizeExportRoot(settings.getExportDirectory());
+                if (java.nio.file.Files.isDirectory(configured)) {
+                    return configured;
+                }
+            } catch (BusinessException ignored) {
+                // 使用默认目录作为初始位置
+            }
+        }
+        return ExportPathHelper.resolveDefaultExportRoot();
     }
 
     private ExportSettings loadOrCreate() {
