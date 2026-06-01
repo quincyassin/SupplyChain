@@ -4,15 +4,18 @@ import com.ecommerce.ordersplit.dto.SaveExportSettingsRequest;
 import com.ecommerce.ordersplit.entity.ExportSettings;
 import com.ecommerce.ordersplit.model.ExportMode;
 import com.ecommerce.ordersplit.repository.ExportSettingsRepository;
+import java.nio.file.Path;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.api.io.TempDir;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -24,6 +27,9 @@ import static org.mockito.Mockito.when;
  */
 @ExtendWith(MockitoExtension.class)
 class ExportSettingsServiceTest {
+
+    @TempDir
+    Path tempDir;
 
     @Mock private ExportSettingsRepository exportSettingsRepository;
 
@@ -47,7 +53,7 @@ class ExportSettingsServiceTest {
     }
 
     @Test
-    void saveSettings_shouldPersistSelectedMode() {
+    void saveSettings_shouldPersistSelectedModeAndDirectory() {
         ExportSettings existing = new ExportSettings();
         existing.setId(ExportSettings.SINGLETON_ID);
         existing.setMode(ExportMode.SERVER_DIRECTORY);
@@ -56,12 +62,34 @@ class ExportSettingsServiceTest {
         when(exportSettingsRepository.save(any(ExportSettings.class)))
                 .thenAnswer(invocation -> invocation.getArgument(0));
 
+        Path customDir = tempDir.resolve("exports");
         SaveExportSettingsRequest request = new SaveExportSettingsRequest();
-        request.setMode(ExportMode.BROWSER_DOWNLOAD);
+        request.setMode(ExportMode.SERVER_DIRECTORY);
+        request.setExportDirectory(customDir.toString());
+
         service.saveSettings(request);
 
         ArgumentCaptor<ExportSettings> captor = ArgumentCaptor.forClass(ExportSettings.class);
         verify(exportSettingsRepository).save(captor.capture());
-        assertEquals(ExportMode.BROWSER_DOWNLOAD, captor.getValue().getMode());
+        assertEquals(ExportMode.SERVER_DIRECTORY, captor.getValue().getMode());
+        assertEquals(
+                customDir.toAbsolutePath().normalize().toString(),
+                captor.getValue().getExportDirectory());
+    }
+
+    @Test
+    void getExportRootPath_shouldUseConfiguredDirectory() {
+        Path customDir = tempDir.resolve("configured");
+        ExportSettings existing = new ExportSettings();
+        existing.setId(ExportSettings.SINGLETON_ID);
+        existing.setMode(ExportMode.SERVER_DIRECTORY);
+        existing.setExportDirectory(customDir.toString());
+        when(exportSettingsRepository.findById(ExportSettings.SINGLETON_ID))
+                .thenReturn(Optional.of(existing));
+
+        Path exportRoot = service.getExportRootPath();
+
+        assertEquals(customDir.toAbsolutePath().normalize(), exportRoot);
+        assertTrue(java.nio.file.Files.isDirectory(exportRoot));
     }
 }

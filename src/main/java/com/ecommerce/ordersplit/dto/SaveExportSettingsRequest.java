@@ -12,4 +12,7 @@ import lombok.Data;
 public class SaveExportSettingsRequest {
 
     private ExportMode mode;
+
+    /** 导出根目录（绝对路径，SERVER_DIRECTORY 模式必填） */
+    private String exportDirectory;
 }

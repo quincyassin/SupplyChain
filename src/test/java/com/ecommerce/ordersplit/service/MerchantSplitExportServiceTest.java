@@ -20,6 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.quality.Strictness;
+import org.mockito.junit.jupiter.MockitoSettings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -34,6 +36,7 @@ import static org.mockito.Mockito.when;
  * @author huangxinsong
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class MerchantSplitExportServiceTest {
 
     private static final ZoneId ZONE_SHANGHAI = ZoneId.of("Asia/Shanghai");
@@ -42,17 +45,23 @@ class MerchantSplitExportServiceTest {
     @Mock private ImportOrderQueryService importOrderQueryService;
     @Mock private ExcelWriterService excelWriterService;
     @Mock private PlatformMappingTemplateService platformMappingTemplateService;
+    @Mock private ExportSettingsService exportSettingsService;
 
     private MerchantSplitExportService service;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
+        java.nio.file.Path exportRoot =
+                java.nio.file.Files.createTempDirectory("merchant-export-test");
+        org.mockito.Mockito.when(exportSettingsService.getExportRootPath())
+                .thenReturn(exportRoot);
         service =
                 new MerchantSplitExportService(
                         importOrderRepository,
                         importOrderQueryService,
                         excelWriterService,
-                        platformMappingTemplateService);
+                        platformMappingTemplateService,
+                        exportSettingsService);
     }
 
     @Test

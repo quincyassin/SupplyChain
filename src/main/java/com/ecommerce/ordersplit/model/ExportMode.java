@@ -7,7 +7,7 @@ package com.ecommerce.ordersplit.model;
  */
 public enum ExportMode {
 
-    /** 写入服务器桌面 testData 目录（当前默认行为） */
+    /** 写入服务器本地配置的导出目录（默认桌面 testData） */
     SERVER_DIRECTORY,
 
     /** 通过浏览器下载 ZIP 压缩包 */

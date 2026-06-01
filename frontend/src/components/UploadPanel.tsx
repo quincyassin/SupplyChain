@@ -1770,8 +1770,8 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
           ? result.exportMode === "BROWSER_DOWNLOAD"
             ? `，已下载 ${result.exportedFileCount} 个 Excel（ZIP）`
             : splitExportFolderOpened
-              ? `，已导出 ${result.exportedFileCount} 个 Excel 到桌面 testData/${exportDate}/分单，并已打开文件夹`
-              : `，已导出 ${result.exportedFileCount} 个 Excel 到桌面 testData/${exportDate}/分单`
+              ? `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${exportDate}/分单，并已打开文件夹`
+              : `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${exportDate}/分单`
           : "";
       const unmatchedHint =
         result.skippedCount > 0
@@ -1931,7 +1931,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         result.exportMode === "SERVER_DIRECTORY" &&
         receiptExportFolderOpened &&
         exportDate
-          ? `，已打开 testData/${exportDate}/回单`
+          ? `，已打开 ${result.exportDirectory ?? "导出目录"}/${exportDate}/回单`
           : "";
       const platformHint =
         platforms != null && platforms.length > 0

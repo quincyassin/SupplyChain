@@ -6,6 +6,8 @@ import com.ecommerce.ordersplit.entity.ExportSettings;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.model.ExportMode;
 import com.ecommerce.ordersplit.repository.ExportSettingsRepository;
+import com.ecommerce.ordersplit.util.ExportPathHelper;
+import java.nio.file.Path;
 import java.time.format.DateTimeFormatter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -35,6 +37,14 @@ public class ExportSettingsService {
         return loadOrCreate().getMode();
     }
 
+    @Transactional(readOnly = true)
+    public Path getExportRootPath() {
+        ExportSettings settings = loadOrCreate();
+        Path exportRoot = ExportPathHelper.normalizeExportRoot(settings.getExportDirectory());
+        ExportPathHelper.ensureExportRootWritable(exportRoot);
+        return exportRoot;
+    }
+
     @Transactional
     public ExportSettingsDto saveSettings(SaveExportSettingsRequest request) {
         if (request == null || request.getMode() == null) {
@@ -42,6 +52,17 @@ public class ExportSettingsService {
         }
         ExportSettings settings = loadOrCreate();
         settings.setMode(request.getMode());
+        if (request.getMode() == ExportMode.SERVER_DIRECTORY) {
+            Path exportRoot =
+                    ExportPathHelper.normalizeExportRoot(request.getExportDirectory());
+            ExportPathHelper.ensureExportRootWritable(exportRoot);
+            settings.setExportDirectory(exportRoot.toString());
+        } else if (request.getExportDirectory() != null && !request.getExportDirectory().isBlank()) {
+            Path exportRoot =
+                    ExportPathHelper.normalizeExportRoot(request.getExportDirectory());
+            ExportPathHelper.ensureExportRootWritable(exportRoot);
+            settings.setExportDirectory(exportRoot.toString());
+        }
         exportSettingsRepository.save(settings);
         return toDto(settings);
     }
@@ -56,6 +77,7 @@ public class ExportSettingsService {
         ExportSettings settings = new ExportSettings();
         settings.setId(ExportSettings.SINGLETON_ID);
         settings.setMode(ExportMode.SERVER_DIRECTORY);
+        settings.setExportDirectory(ExportPathHelper.resolveDefaultExportRoot().toString());
         return exportSettingsRepository.save(settings);
     }
 
@@ -64,6 +86,10 @@ public class ExportSettingsService {
                 settings.getUpdatedAt() == null
                         ? null
                         : settings.getUpdatedAt().format(DISPLAY_TIME);
-        return new ExportSettingsDto(settings.getMode(), updatedAt);
+        String exportDirectory =
+                settings.getExportDirectory() == null || settings.getExportDirectory().isBlank()
+                        ? ExportPathHelper.resolveDefaultExportRoot().toString()
+                        : settings.getExportDirectory().trim();
+        return new ExportSettingsDto(settings.getMode(), exportDirectory, updatedAt);
     }
 }

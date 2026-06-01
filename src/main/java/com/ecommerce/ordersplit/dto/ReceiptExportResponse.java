@@ -26,6 +26,9 @@ public class ReceiptExportResponse {
     /** 浏览器下载令牌（已预构建 ZIP，10 分钟内有效） */
     private String exportDownloadToken;
 
-    /** 本次导出写入的操作日（testData/{exportDate}/回单/） */
+    /** 本次导出写入的操作日（{exportDirectory}/{exportDate}/回单/） */
     private String exportDate;
+
+    /** 导出根目录（SERVER_DIRECTORY 模式下有效） */
+    private String exportDirectory;
 }

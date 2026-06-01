@@ -17,5 +17,8 @@ public class ExportSettingsDto {
 
     private ExportMode mode;
 
+    /** 导出根目录（绝对路径） */
+    private String exportDirectory;
+
     private String updatedAt;
 }

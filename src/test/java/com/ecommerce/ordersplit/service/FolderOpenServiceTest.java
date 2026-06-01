@@ -5,39 +5,39 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.Mockito.when;
 
 /**
  * 文件夹打开服务测试
  *
  * @author huangxinsong
  */
+@ExtendWith(MockitoExtension.class)
 class FolderOpenServiceTest {
 
     @TempDir
     Path tempDir;
 
-    private Path desktopDir;
+    @Mock
+    private ExportSettingsService exportSettingsService;
+
     private Path exportRoot;
     private FolderOpenService folderOpenService;
 
     @BeforeEach
     void setUp() throws Exception {
-        desktopDir = tempDir.resolve("Desktop");
-        Files.createDirectories(desktopDir);
-        exportRoot = desktopDir.resolve("testData");
+        exportRoot = tempDir.resolve("exports").toAbsolutePath().normalize();
         Files.createDirectories(exportRoot);
-
-        folderOpenService = new FolderOpenService() {
-            @Override
-            Path resolveExportRoot() {
-                return exportRoot.toAbsolutePath().normalize();
-            }
-        };
+        when(exportSettingsService.getExportRootPath()).thenReturn(exportRoot);
+        folderOpenService = new FolderOpenService(exportSettingsService);
     }
 
     @Test
@@ -52,21 +52,20 @@ class FolderOpenServiceTest {
     }
 
     @Test
-    void openDirectory_shouldRejectMissingDirectory() throws Exception {
+    void openDirectory_shouldRejectMissingDirectory() {
         Path missing = exportRoot.resolve("2026-05-29");
 
         BusinessException ex =
                 assertThrows(
                         BusinessException.class, () -> folderOpenService.openDirectory(missing));
-        assertEquals("导出目录不存在：" + missing.toAbsolutePath().normalize(), ex.getMessage());
+        assertEquals("导出目录不存在：" + missing, ex.getMessage());
     }
 
     @Test
     void openDirectory_shouldAllowExportDateDirectory() throws Exception {
-        Path dateDir = exportRoot.resolve("2026-05-29");
+        Path dateDir = exportRoot.resolve("2026-05-29").resolve("分单");
         Files.createDirectories(dateDir);
 
-        // 测试环境无 GUI，走 ProcessBuilder 兜底；只要不抛业务异常即可
         assertDoesNotThrow(() -> folderOpenService.openDirectory(dateDir));
     }
 }

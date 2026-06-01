@@ -38,6 +38,9 @@ public class AssignMerchantResult {
     /** 当前导出方式 */
     private ExportMode exportMode;
 
+    /** 导出根目录（SERVER_DIRECTORY 模式下有效） */
+    private String exportDirectory;
+
     /** 分单后列表视图订单 */
     private SplitResultResponse orders;
 }

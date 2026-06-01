@@ -6,18 +6,19 @@ import java.awt.HeadlessException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 /**
- * 在服务器本机打开指定文件夹（仅限桌面 testData 导出目录）
+ * 在服务器本机打开指定文件夹（仅限已配置的导出根目录及其子目录）
  *
  * @author huangxinsong
  */
 @Service
+@RequiredArgsConstructor
 public class FolderOpenService {
 
-    private static final String EXPORT_ROOT_DIR = "testData";
+    private final ExportSettingsService exportSettingsService;
 
     /**
      * 打开指定目录；路径必须在 {@link #resolveExportRoot()} 之下
@@ -35,14 +36,10 @@ public class FolderOpenService {
     }
 
     /**
-     * 桌面 testData 根目录（绝对路径）
+     * 当前配置的导出根目录（绝对路径）
      */
     Path resolveExportRoot() {
-        Path desktop = Paths.get(System.getProperty("user.home"), "Desktop");
-        if (!Files.isDirectory(desktop)) {
-            throw new BusinessException("未找到桌面目录，无法打开导出文件夹");
-        }
-        return desktop.resolve(EXPORT_ROOT_DIR).toAbsolutePath().normalize();
+        return exportSettingsService.getExportRootPath();
     }
 
     private void assertUnderAllowedExportRoot(Path directory) {

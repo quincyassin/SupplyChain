@@ -409,6 +409,7 @@ public class OrderProcessService {
                     exportedFiles,
                     exportedFileCount,
                     exportMode,
+                    resolveConfiguredExportDirectory(),
                     buildEmptySplitResult(normalizedEnd));
         } catch (IOException ex) {
             throw new BusinessException("导出 Excel 失败: " + ex.getMessage());
@@ -523,7 +524,8 @@ public class OrderProcessService {
                         exportedFiles,
                         exportMode,
                         null,
-                        prepared.exportDate().toString());
+                        prepared.exportDate().toString(),
+                        resolveConfiguredExportDirectory());
             }
             LocalDate normalizedStart = importOrderQueryService.requireRecentDate(startDate);
             LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
@@ -539,7 +541,8 @@ public class OrderProcessService {
                     List.of(),
                     exportMode,
                     exportDownloadToken,
-                    prepared.exportDate().toString());
+                    prepared.exportDate().toString(),
+                    resolveConfiguredExportDirectory());
         } catch (IOException ex) {
             throw new BusinessException("导出回单失败: " + ex.getMessage());
         }
@@ -786,11 +789,25 @@ public class OrderProcessService {
                     merchantSplitExportService.writeReconcileFile(
                             exportDate, downloadName, outputBytes);
             return new ReconcileExportResponse(
-                    exportedFiles.size(), exportedFiles, exportMode, null, exportDate.toString());
+                    exportedFiles.size(),
+                    exportedFiles,
+                    exportMode,
+                    null,
+                    exportDate.toString(),
+                    resolveConfiguredExportDirectory());
         }
         String exportDownloadToken = exportDownloadCacheService.store(downloadName, outputBytes);
         return new ReconcileExportResponse(
-                1, List.of(), exportMode, exportDownloadToken, exportDate.toString());
+                1,
+                List.of(),
+                exportMode,
+                exportDownloadToken,
+                exportDate.toString(),
+                resolveConfiguredExportDirectory());
+    }
+
+    private String resolveConfiguredExportDirectory() {
+        return exportSettingsService.getSettings().getExportDirectory();
     }
 
     /**

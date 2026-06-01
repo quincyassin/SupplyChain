@@ -819,6 +819,7 @@ export interface AssignMerchantResult {
   exportedFiles: string[];
   exportedFileCount: number;
   exportMode: ExportMode;
+  exportDirectory?: string | null;
   orders: SplitResult;
 }
 
@@ -826,6 +827,7 @@ export type ExportMode = "SERVER_DIRECTORY" | "BROWSER_DOWNLOAD";
 
 export interface ExportSettings {
   mode: ExportMode;
+  exportDirectory?: string | null;
   updatedAt?: string | null;
 }
 
@@ -838,13 +840,12 @@ export async function fetchExportSettings(): Promise<ExportSettings> {
   }
 }
 
-export async function saveExportSettings(
-  mode: ExportMode,
-): Promise<ExportSettings> {
+export async function saveExportSettings(payload: {
+  mode: ExportMode;
+  exportDirectory?: string;
+}): Promise<ExportSettings> {
   try {
-    const { data } = await client.put<ExportSettings>("/export-settings", {
-      mode,
-    });
+    const { data } = await client.put<ExportSettings>("/export-settings", payload);
     return data;
   } catch (error) {
     throw new Error(await extractApiErrorMessage(error));
@@ -857,6 +858,7 @@ export interface ReceiptExportResult {
   exportMode: ExportMode;
   exportDownloadToken?: string | null;
   exportDate?: string | null;
+  exportDirectory?: string | null;
 }
 
 export async function downloadSplitByMerchantExport(
@@ -1044,6 +1046,7 @@ export interface ReconcileExportResult {
   exportMode: ExportMode;
   exportDownloadToken?: string | null;
   exportDate?: string | null;
+  exportDirectory?: string | null;
 }
 
 export interface AfterSalesExportPayload {

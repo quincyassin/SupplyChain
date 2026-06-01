@@ -10,7 +10,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -44,7 +43,6 @@ public class MerchantSplitExportService {
     private static final ZoneId ZONE_SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter DATE_FOLDER = DateTimeFormatter.ISO_LOCAL_DATE;
 
-    private static final String EXPORT_ROOT = "testData";
     private static final String SPLIT_SUBDIR = "分单";
     private static final String RECEIPT_SUBDIR = "回单";
     private static final String RECONCILE_SUBDIR = "对账";
@@ -55,6 +53,7 @@ public class MerchantSplitExportService {
     private final ImportOrderQueryService importOrderQueryService;
     private final ExcelWriterService excelWriterService;
     private final PlatformMappingTemplateService platformMappingTemplateService;
+    private final ExportSettingsService exportSettingsService;
 
     /**
      * 将本次分单涉及的订单按商家导出到指定操作日目录（testData/{exportDate}/分单）
@@ -868,11 +867,7 @@ public class MerchantSplitExportService {
     }
 
     Path resolveDateRootDir(LocalDate date) {
-        Path desktop = Paths.get(System.getProperty("user.home"), "Desktop");
-        if (!Files.isDirectory(desktop)) {
-            throw new BusinessException("未找到桌面目录，无法导出 Excel");
-        }
-        return desktop.resolve(EXPORT_ROOT).resolve(date.format(DATE_FOLDER));
+        return exportSettingsService.getExportRootPath().resolve(date.format(DATE_FOLDER));
     }
 
     Path resolveSplitExportDir(LocalDate date) {

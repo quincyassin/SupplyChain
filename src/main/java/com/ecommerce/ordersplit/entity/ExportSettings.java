@@ -32,6 +32,10 @@ public class ExportSettings {
     @Column(nullable = false, length = 32)
     private ExportMode mode = ExportMode.SERVER_DIRECTORY;
 
+    /** 导出根目录（绝对路径）；其下按 {日期}/分单|回单|对账 组织 */
+    @Column(name = "export_directory", length = 512)
+    private String exportDirectory;
+
     @UpdateTimestamp
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
