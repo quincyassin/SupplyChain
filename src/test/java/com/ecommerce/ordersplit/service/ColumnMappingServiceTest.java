@@ -181,6 +181,33 @@ class ColumnMappingServiceTest {
     }
 
     @Test
+    void suggestMapping_phoneShouldNotMapToAddressOrRemarkColumn() {
+        List<String> headers = List.of("订单编号", "收货地址", "卖家备注", "手机号");
+        ColumnMappingConfig config = service.suggestMapping(headers);
+
+        ColumnMappingItem phone =
+                config.getItems().stream()
+                        .filter(item -> item.getFieldKey() == OrderFieldKey.PHONE)
+                        .findFirst()
+                        .orElseThrow();
+        ColumnMappingItem address =
+                config.getItems().stream()
+                        .filter(item -> item.getFieldKey() == OrderFieldKey.ADDRESS)
+                        .findFirst()
+                        .orElseThrow();
+        ColumnMappingItem remark =
+                config.getItems().stream()
+                        .filter(item -> item.getFieldKey() == OrderFieldKey.REMARK)
+                        .findFirst()
+                        .orElseThrow();
+
+        assertEquals(3, phone.getSourceIndex());
+        assertEquals(1, address.getSourceIndex());
+        assertEquals(2, remark.getSourceIndex());
+        assertTrue(phone.isEnabled());
+    }
+
+    @Test
     void suggestMapping_shouldNotDefaultUnmatchedFieldsToFirstColumn() {
         List<String> headers = List.of("订单编号");
         ColumnMappingConfig config = service.suggestMapping(headers);

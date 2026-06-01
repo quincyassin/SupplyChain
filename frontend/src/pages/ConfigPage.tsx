@@ -6,12 +6,14 @@ import {
   TableOutlined,
   ExportOutlined,
   ApartmentOutlined,
+  DatabaseOutlined,
   SafetyCertificateOutlined,
 } from "@ant-design/icons";
 import HeaderMappingConfig from "../components/HeaderMappingConfig";
 import FieldMappingPanel from "../components/FieldMappingPanel";
 import MerchantConfigPanel from "../components/MerchantConfigPanel";
 import ExportSettingsPanel from "../components/ExportSettingsPanel";
+import DataArchivePanel from "../components/DataArchivePanel";
 import LicensePanel from "../components/LicensePanel";
 import type { LicenseStatus } from "../api/licenseApi";
 
@@ -23,6 +25,7 @@ type ConfigMenuKey =
   | "field-mapping"
   | "merchant-config"
   | "export-settings"
+  | "data-archive"
   | "license";
 
 interface ConfigPageProps {
@@ -52,6 +55,11 @@ const menuItems = [
     label: "导出配置",
   },
   {
+    key: "data-archive",
+    icon: <DatabaseOutlined />,
+    label: "数据归档",
+  },
+  {
     key: "license",
     icon: <SafetyCertificateOutlined />,
     label: "软件授权",
@@ -63,6 +71,7 @@ const menuTitles: Record<ConfigMenuKey, string> = {
   "field-mapping": "字段映射",
   "merchant-config": "商家配置",
   "export-settings": "导出配置",
+  "data-archive": "数据归档",
   license: "软件授权",
 };
 
@@ -97,6 +106,7 @@ export default function ConfigPage({ initialKey, onLicenseActivated }: ConfigPag
           {activeKey === "field-mapping" && <FieldMappingPanel />}
           {activeKey === "merchant-config" && <MerchantConfigPanel />}
           {activeKey === "export-settings" && <ExportSettingsPanel />}
+          {activeKey === "data-archive" && <DataArchivePanel />}
           {activeKey === "license" && (
             <LicensePanel onLicenseActivated={onLicenseActivated} />
           )}

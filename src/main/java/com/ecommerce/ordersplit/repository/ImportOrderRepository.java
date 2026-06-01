@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.repository;
 
 import com.ecommerce.ordersplit.entity.ImportOrder;
+import com.ecommerce.ordersplit.model.AfterSalesStatus;
 import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -127,4 +128,15 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
             @Param("spec") String spec,
             @Param("platform") String platform,
             @Param("supplyPrice") java.math.BigDecimal supplyPrice);
+
+    @Query("""
+            SELECT COUNT(o) FROM ImportOrder o
+            WHERE o.issueDate >= :startInclusive
+              AND o.issueDate < :endExclusive
+              AND o.afterSalesStatus = :status
+            """)
+    long countInIssueDateRangeAndAfterSalesStatus(
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive,
+            @Param("status") AfterSalesStatus status);
 }

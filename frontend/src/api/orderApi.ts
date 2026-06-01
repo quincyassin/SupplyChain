@@ -1197,6 +1197,100 @@ export async function fetchTasks(): Promise<TaskItem[]> {
   return data;
 }
 
+export interface ImportOrderArchivePreview {
+  beforeDate: string;
+  orderCount: number;
+  pendingAfterSalesCount: number;
+  completedAfterSalesCount: number;
+}
+
+export interface ImportOrderArchiveOperationResult {
+  movedCount: number;
+  message: string;
+}
+
+export async function previewArchiveOrders(
+  startDate: string,
+  endDate: string,
+): Promise<ImportOrderArchivePreview> {
+  try {
+    const { data } = await client.get<ImportOrderArchivePreview>("/archive/preview", {
+      params: { startDate, endDate },
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function archiveOrders(
+  startDate: string,
+  endDate: string,
+): Promise<ImportOrderArchiveOperationResult> {
+  try {
+    const { data } = await client.post<ImportOrderArchiveOperationResult>("/archive", {
+      startDate,
+      endDate,
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function fetchArchivedDateSummaries(): Promise<ImportedDateSummary[]> {
+  try {
+    const { data } = await client.get<ImportedDateSummary[]>("/archive/dates");
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function fetchArchivedOrdersByDateRange(
+  startDate: string,
+  endDate: string,
+  keyword?: string,
+): Promise<SplitResult> {
+  try {
+    const { data } = await client.get<SplitResult>("/archive/imported", {
+      params: { startDate, endDate, keyword: keyword?.trim() || undefined },
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function previewRestoreArchivedOrders(
+  startDate: string,
+  endDate: string,
+): Promise<ImportOrderArchivePreview> {
+  try {
+    const { data } = await client.get<ImportOrderArchivePreview>("/archive/restore/preview", {
+      params: { startDate, endDate },
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function restoreArchivedOrders(
+  startDate: string,
+  endDate: string,
+): Promise<ImportOrderArchiveOperationResult> {
+  try {
+    const { data } = await client.post<ImportOrderArchiveOperationResult>(
+      "/archive/restore",
+      { startDate, endDate },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
 export function downloadBlob(blob: Blob, filename: string) {
   const url = window.URL.createObjectURL(blob);
   const link = document.createElement("a");

@@ -10,6 +10,7 @@ import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import com.ecommerce.ordersplit.model.OrderRow;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
 import com.ecommerce.ordersplit.util.LogisticsNoUtil;
+import com.ecommerce.ordersplit.util.PhoneImportValidator;
 import com.ecommerce.ordersplit.util.SystemNoGenerator;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -37,6 +38,7 @@ public class ImportOrderPersistenceService {
 
     private static final ZoneId ZONE_SHANGHAI = ZoneId.of("Asia/Shanghai");
     private static final int AFTER_SALES_REMARK_MAX_LENGTH = 512;
+    private static final int PHONE_MAX_LENGTH = 32;
 
     private final ImportOrderRepository importOrderRepository;
     private final DailyTableService dailyTableService;
@@ -238,7 +240,7 @@ public class ImportOrderPersistenceService {
             entity.setReceiver(normalizeOptionalField(request.getReceiver(), 64, "收货人"));
         }
         if (request.getPhone() != null) {
-            entity.setPhone(normalizeOptionalField(request.getPhone(), 32, "收货人电话"));
+            entity.setPhone(normalizeOptionalField(request.getPhone(), PHONE_MAX_LENGTH, "收货人电话"));
         }
         if (request.getAddress() != null) {
             entity.setAddress(normalizeOptionalField(request.getAddress(), 512, "收货人地址"));
@@ -503,6 +505,13 @@ public class ImportOrderPersistenceService {
         entity.setAfterSalesAt(issueDateTime);
     }
 
+    private String normalizePhone(String value) {
+        if (value == null || value.isBlank()) {
+            return "";
+        }
+        return value.trim();
+    }
+
     private ImportOrder toEntity(
             Long taskId,
             String platform,
@@ -522,7 +531,9 @@ public class ImportOrderPersistenceService {
         entity.setQuantity(display.getQuantity());
         entity.setReceiver(display.getReceiver());
         entity.setAddress(display.getAddress());
-        entity.setPhone(display.getPhone());
+        int excelRowNum = source.getSourceRowNum() > 0 ? source.getSourceRowNum() : 0;
+        PhoneImportValidator.validateImportValue(display.getPhone(), excelRowNum);
+        entity.setPhone(normalizePhone(display.getPhone()));
         entity.setShippingFee(normalizeShippingFee(display.getShippingFee()));
         entity.setRemark(display.getRemark());
         applyImportedAfterSales(entity, source.getAfterSalesRemark(), issueDateTime);

@@ -3,6 +3,7 @@ package com.ecommerce.ordersplit.service;
 import com.ecommerce.ordersplit.dto.AssignMerchantPersistenceResult;
 import com.ecommerce.ordersplit.dto.UpdateImportedOrderFieldsRequest;
 import com.ecommerce.ordersplit.entity.ImportOrder;
+import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.model.AfterSalesStatus;
 import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import com.ecommerce.ordersplit.model.OrderRow;
@@ -27,6 +28,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -109,6 +111,62 @@ class ImportOrderPersistenceServiceTest {
     assertTrue(row.getSystemNo().matches("\\d{10}"));
     verify(productPriceService).buildLookupForImport(captor.getValue());
     verify(productPriceService).applyConfiguredPrices(eq(row), any(ImportPriceLookup.class));
+  }
+
+  @Test
+  void saveSplitOrders_shouldRejectOverlongPhoneOnImport() {
+    String overlongPhone = "1".repeat(33);
+    Map<String, List<OrderRow>> split = new LinkedHashMap<>();
+    split.put(
+        "商家A",
+        List.of(
+            OrderRow.builder()
+                .orderNo("O002")
+                .merchant("商家A")
+                .productName("商品")
+                .sku("规格")
+                .quantity(1)
+                .phone(overlongPhone)
+                .sourceRowNum(6)
+                .build()));
+
+    BusinessException ex =
+        assertThrows(
+            BusinessException.class,
+            () ->
+                persistenceService.saveSplitOrders(
+                    100L, "淘宝", split, LocalDateTime.of(2026, 5, 29, 10, 0)));
+
+    assertTrue(ex.getMessage().contains("第 6 行"));
+    assertTrue(ex.getMessage().contains("32"));
+    verify(importOrderRepository, never()).saveAll(anyList());
+  }
+
+  @Test
+  void saveSplitOrders_shouldRejectAddressLikePhoneContent() {
+    Map<String, List<OrderRow>> split = new LinkedHashMap<>();
+    split.put(
+        "商家A",
+        List.of(
+            OrderRow.builder()
+                .orderNo("O004")
+                .merchant("商家A")
+                .productName("商品")
+                .sku("规格")
+                .quantity(1)
+                .phone("广东省深圳市南山区科技园南路88号A座1201室联系电话13800000000")
+                .sourceRowNum(5)
+                .build()));
+
+    BusinessException ex =
+        assertThrows(
+            BusinessException.class,
+            () ->
+                persistenceService.saveSplitOrders(
+                    100L, "淘宝", split, LocalDateTime.of(2026, 5, 29, 10, 0)));
+    assertTrue(ex.getMessage().contains("第 5 行"));
+    assertTrue(ex.getMessage().contains("表头映射"));
+    verify(importOrderRepository, never()).saveAll(anyList());
   }
 
   @Test
