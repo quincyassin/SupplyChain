@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,7 +22,7 @@ import javax.swing.UIManager;
 import org.springframework.stereotype.Service;
 
 /**
- * 本机文件夹选择器：Windows 桌面优先 Swing；macOS 用 osascript；无图形环境时 Windows 兜底 PowerShell。
+ * 本机文件夹选择器：Windows 桌面优先同进程 Swing（javaw 下更可靠）；macOS 用 osascript；失败时 PowerShell 兜底。
  *
  * @author huangxinsong
  */
@@ -50,8 +51,9 @@ public class FolderPickerService {
      */
     public Optional<Path> pickDirectory(Path initialDirectory, String dialogTitle) {
         String title = normalizeTitle(dialogTitle);
-        if (isWindows() && !GraphicsEnvironment.isHeadless()) {
-            return pickDirectoryOnWindowsDesktop(initialDirectory, title);
+        if (isWindows()) {
+            ensureWindowsDesktopAwtEnabled();
+            return pickDirectoryOnWindows(initialDirectory, title);
         }
         NativePickOutcome nativeOutcome = tryNativeFolderPicker(initialDirectory, title);
         if (nativeOutcome.status() == NativePickStatus.CANCELLED) {
@@ -67,29 +69,47 @@ public class FolderPickerService {
     }
 
     /**
-     * Windows 桌面环境：优先同进程 Swing 对话框（javaw 下更可靠），失败时 PowerShell 兜底。
+     * Windows：有图形环境时优先同进程 Swing；无 headless 或 Swing 失败时用 PowerShell 兜底。
      */
-    private Optional<Path> pickDirectoryOnWindowsDesktop(Path initialDirectory, String title) {
-        try {
-            return pickDirectoryWithJavaUi(initialDirectory, title);
-        } catch (BusinessException ex) {
-            NativePickOutcome fallback = pickDirectoryWithWindowsPowerShell(initialDirectory, title);
-            if (fallback.status() == NativePickStatus.CANCELLED) {
-                return Optional.empty();
+    private Optional<Path> pickDirectoryOnWindows(Path initialDirectory, String title) {
+        if (!GraphicsEnvironment.isHeadless()) {
+            try {
+                return pickDirectoryWithJavaUi(initialDirectory, title);
+            } catch (BusinessException ex) {
+                return pickDirectoryOnWindowsPowerShellFallback(initialDirectory, title, ex);
             }
-            if (fallback.status() == NativePickStatus.SELECTED && fallback.path() != null) {
-                return Optional.of(fallback.path());
-            }
-            throw ex;
+        }
+        return pickDirectoryOnWindowsPowerShellFallback(initialDirectory, title, null);
+    }
+
+    private Optional<Path> pickDirectoryOnWindowsPowerShellFallback(
+            Path initialDirectory, String title, BusinessException swingFailure) {
+        NativePickOutcome powerShellOutcome =
+                pickDirectoryWithWindowsPowerShell(initialDirectory, title);
+        if (powerShellOutcome.status() == NativePickStatus.CANCELLED) {
+            return Optional.empty();
+        }
+        if (powerShellOutcome.status() == NativePickStatus.SELECTED
+                && powerShellOutcome.path() != null) {
+            return Optional.of(powerShellOutcome.path());
+        }
+        if (swingFailure != null) {
+            throw new BusinessException("无法打开文件夹选择器：" + swingFailure.getMessage());
+        }
+        throw new BusinessException(
+                "无法打开文件夹选择器，请确认已安装 PowerShell 并在本机图形界面下运行");
+    }
+
+    /** 与 start.bat / application-standalone 一致，避免 Spring 启动后仍为 headless */
+    private void ensureWindowsDesktopAwtEnabled() {
+        if ("true".equalsIgnoreCase(System.getProperty("java.awt.headless"))) {
+            System.setProperty("java.awt.headless", "false");
         }
     }
 
     private NativePickOutcome tryNativeFolderPicker(Path initialDirectory, String title) {
         if (isMacOs()) {
             return pickDirectoryWithMacOsScript(initialDirectory, title);
-        }
-        if (isWindows()) {
-            return pickDirectoryWithWindowsPowerShell(initialDirectory, title);
         }
         return new NativePickOutcome(NativePickStatus.UNAVAILABLE, null);
     }
@@ -121,11 +141,8 @@ public class FolderPickerService {
         try {
             Process process =
                     new ProcessBuilder(
-                                    "powershell",
-                                    "-NoProfile",
-                                    "-STA",
-                                    "-Command",
-                                    buildWindowsChooseFolderCommand(initialDirectory, title))
+                                    buildWindowsPowerShellPickCommand(
+                                            initialDirectory, title))
                             .redirectErrorStream(true)
                             .start();
             ProcessOutput output = readProcessOutput(process);
@@ -177,6 +194,29 @@ public class FolderPickerService {
                 "if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath; exit 0 }; ");
         command.append("exit ").append(WINDOWS_PICK_CANCEL_EXIT_CODE);
         return command.toString();
+    }
+
+    static String resolveWindowsPowerShellExecutable() {
+        String systemRoot = System.getenv("SystemRoot");
+        if (systemRoot != null && !systemRoot.isBlank()) {
+            Path bundled =
+                    Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (Files.isRegularFile(bundled)) {
+                return bundled.toString();
+            }
+        }
+        return "powershell.exe";
+    }
+
+    static List<String> buildWindowsPowerShellPickCommand(Path initialDirectory, String title) {
+        return List.of(
+                resolveWindowsPowerShellExecutable(),
+                "-NoProfile",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-STA",
+                "-Command",
+                buildWindowsChooseFolderCommand(initialDirectory, title));
     }
 
     static String escapeAppleScriptString(String value) {
@@ -268,6 +308,10 @@ public class FolderPickerService {
             }
             if (initialDirectory != null && Files.isDirectory(initialDirectory)) {
                 chooser.setCurrentDirectory(initialDirectory.toFile());
+            }
+            if (isWindows()) {
+                owner.toFront();
+                owner.requestFocus();
             }
             int result = chooser.showOpenDialog(owner);
             if (result != JFileChooser.APPROVE_OPTION || chooser.getSelectedFile() == null) {

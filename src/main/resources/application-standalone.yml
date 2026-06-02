@@ -1,5 +1,8 @@
 # Windows 单机安装版：内置 H2 文件库 + 前端静态资源，无需 MySQL / Docker
 spring:
+  main:
+    # 允许本机文件夹选择器等 AWT/Swing 能力（Spring Boot Web 默认 headless=true）
+    headless: false
   datasource:
     url: jdbc:h2:file:./data/db/order_split;MODE=MySQL;DB_CLOSE_ON_EXIT=FALSE;AUTO_RECONNECT=TRUE
     driver-class-name: org.h2.Driver

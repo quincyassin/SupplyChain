@@ -28,7 +28,7 @@ if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 REM 升级安装后必须先停旧进程，否则 8080 仍由旧 JAR 提供服务
 call "%~dp0stop.bat" >nul 2>&1
 
-start "" "%JAVA_EXE%" -Dspring.profiles.active=standalone -jar "%JAR_FILE%"
+start "" "%JAVA_EXE%" -Djava.awt.headless=false -Dspring.profiles.active=standalone -jar "%JAR_FILE%"
 
 echo 正在启动，请稍候...
 set /a WAIT=0

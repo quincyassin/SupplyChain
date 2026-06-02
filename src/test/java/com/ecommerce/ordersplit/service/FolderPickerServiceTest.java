@@ -1,5 +1,6 @@
 package com.ecommerce.ordersplit.service;
 
+import java.util.List;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -72,6 +73,8 @@ class FolderPickerServiceTest {
 
         assertTrue(command.contains("EnableVisualStyles"));
         assertTrue(command.contains("FolderBrowserDialog"));
+        assertTrue(command.contains("$dialog.ShowDialog()"));
+        assertFalse(command.contains("$owner."));
         assertTrue(command.contains("选择导出根目录"));
         assertTrue(command.contains(tempDir.toAbsolutePath().normalize().toString()));
         assertTrue(command.contains("exit " + FolderPickerService.WINDOWS_PICK_CANCEL_EXIT_CODE));
@@ -94,6 +97,19 @@ class FolderPickerServiceTest {
                         FolderPickerService.WINDOWS_PICK_CANCEL_EXIT_CODE, "");
 
         assertEquals(FolderPickerService.NativePickStatus.CANCELLED, outcome.status());
+    }
+
+    @Test
+    void buildWindowsPowerShellPickCommand_shouldUseStaAndBypass() {
+        List<String> args =
+                FolderPickerService.buildWindowsPowerShellPickCommand(tempDir, "选择目录");
+
+        assertTrue(args.size() >= 7);
+        assertTrue(args.get(0).toLowerCase().contains("powershell"));
+        assertTrue(args.contains("-STA"));
+        assertTrue(args.contains("-ExecutionPolicy"));
+        assertTrue(args.contains("Bypass"));
+        assertTrue(args.contains("-Command"));
     }
 
     @Test
