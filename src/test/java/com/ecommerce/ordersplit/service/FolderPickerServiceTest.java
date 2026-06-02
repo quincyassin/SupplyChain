@@ -70,8 +70,39 @@ class FolderPickerServiceTest {
                 FolderPickerService.buildWindowsChooseFolderCommand(
                         tempDir, "选择导出根目录");
 
+        assertTrue(command.contains("EnableVisualStyles"));
         assertTrue(command.contains("FolderBrowserDialog"));
         assertTrue(command.contains("选择导出根目录"));
         assertTrue(command.contains(tempDir.toAbsolutePath().normalize().toString()));
+        assertTrue(command.contains("exit " + FolderPickerService.WINDOWS_PICK_CANCEL_EXIT_CODE));
+    }
+
+    @Test
+    void buildWindowsChooseFolderCommand_shouldSkipMissingInitialDirectory() {
+        Path missingDir = tempDir.resolve("not-exists");
+
+        String command =
+                FolderPickerService.buildWindowsChooseFolderCommand(missingDir, "选择目录");
+
+        assertFalse(command.contains("$dialog.SelectedPath ="));
+    }
+
+    @Test
+    void resolveWindowsPowerShellOutcome_shouldDetectCancel() {
+        var outcome =
+                FolderPickerService.resolveWindowsPowerShellOutcome(
+                        FolderPickerService.WINDOWS_PICK_CANCEL_EXIT_CODE, "");
+
+        assertEquals(FolderPickerService.NativePickStatus.CANCELLED, outcome.status());
+    }
+
+    @Test
+    void resolveWindowsPowerShellOutcome_shouldReturnSelectedPath() {
+        var outcome =
+                FolderPickerService.resolveWindowsPowerShellOutcome(
+                        0, tempDir.toAbsolutePath().normalize().toString());
+
+        assertEquals(FolderPickerService.NativePickStatus.SELECTED, outcome.status());
+        assertEquals(tempDir.toAbsolutePath().normalize(), outcome.path());
     }
 }

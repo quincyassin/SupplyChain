@@ -31,7 +31,7 @@ const modeOptions: Array<{
     value: "SERVER_DIRECTORY",
     label: "导出到本地目录",
     description:
-      "分单、回单、对账 Excel 写入下方选择的目录，按 {日期}/分单、{日期}/回单、{日期}/对账 组织。",
+      "分单、回单、对账 Excel 写入下方选择的目录，按 {年}/{月}/{日}/分单、{年}/{月}/{日}/回单、{年}/{月}/{日}/对账 组织。",
   },
   {
     value: "BROWSER_DOWNLOAD",

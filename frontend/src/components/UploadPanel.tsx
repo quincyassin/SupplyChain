@@ -62,6 +62,7 @@ import {
   fetchImportedDateSummaries,
   fetchImportedOrdersByDateRange,
   fetchPlatformTemplates,
+  formatExportDateFolderPath,
   formatLocalDateKey,
   ImportedDateSummary,
   MerchantSplitGroup,
@@ -827,14 +828,10 @@ function EditableShippingFeeCell({
     );
   }
 
-  const displayText =
-    normalizedValue === 0 ? "点击编辑" : formatShippingFee(normalizedValue);
-  const isEmptyHint = normalizedValue === 0;
+  const displayText = formatShippingFee(normalizedValue);
 
   return (
     <Typography.Text
-      className={isEmptyHint ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
-      type={isEmptyHint ? "secondary" : undefined}
       style={{
         cursor: !orderSystemNo ? "not-allowed" : "pointer",
         userSelect: "none",
@@ -1756,8 +1753,8 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
           ? result.exportMode === "BROWSER_DOWNLOAD"
             ? `，已下载 ${result.exportedFileCount} 个 Excel（ZIP）`
             : splitExportFolderOpened
-              ? `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${exportDate}/分单，并已打开文件夹`
-              : `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${exportDate}/分单`
+              ? `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${formatExportDateFolderPath(exportDate)}/分单，并已打开文件夹`
+              : `，已导出 ${result.exportedFileCount} 个 Excel 到 ${result.exportDirectory ?? "导出目录"}/${formatExportDateFolderPath(exportDate)}/分单`
           : "";
       const unmatchedHint =
         result.skippedCount > 0
@@ -1917,7 +1914,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         result.exportMode === "SERVER_DIRECTORY" &&
         receiptExportFolderOpened &&
         exportDate
-          ? `，已打开 ${result.exportDirectory ?? "导出目录"}/${exportDate}/回单`
+          ? `，已打开 ${result.exportDirectory ?? "导出目录"}/${formatExportDateFolderPath(exportDate)}/回单`
           : "";
       const platformHint =
         platforms != null && platforms.length > 0

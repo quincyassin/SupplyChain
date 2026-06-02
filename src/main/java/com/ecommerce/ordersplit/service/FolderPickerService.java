@@ -21,7 +21,7 @@ import javax.swing.UIManager;
 import org.springframework.stereotype.Service;
 
 /**
- * 本机文件夹选择器：macOS 用 osascript、Windows 用 PowerShell，不依赖 Java AWT 非 headless 环境。
+ * 本机文件夹选择器：Windows 桌面优先 Swing；macOS 用 osascript；无图形环境时 Windows 兜底 PowerShell。
  *
  * @author huangxinsong
  */
@@ -30,13 +30,16 @@ public class FolderPickerService {
 
     private static final String APP_NAME = "分单发单助手";
 
-    private enum NativePickStatus {
+    /** PowerShell 文件夹对话框用户取消时的退出码 */
+    static final int WINDOWS_PICK_CANCEL_EXIT_CODE = 2;
+
+    enum NativePickStatus {
         SELECTED,
         CANCELLED,
         UNAVAILABLE
     }
 
-    private record NativePickOutcome(NativePickStatus status, Path path) {}
+    record NativePickOutcome(NativePickStatus status, Path path) {}
 
     /**
      * 弹出系统文件夹选择对话框
@@ -47,6 +50,9 @@ public class FolderPickerService {
      */
     public Optional<Path> pickDirectory(Path initialDirectory, String dialogTitle) {
         String title = normalizeTitle(dialogTitle);
+        if (isWindows() && !GraphicsEnvironment.isHeadless()) {
+            return pickDirectoryOnWindowsDesktop(initialDirectory, title);
+        }
         NativePickOutcome nativeOutcome = tryNativeFolderPicker(initialDirectory, title);
         if (nativeOutcome.status() == NativePickStatus.CANCELLED) {
             return Optional.empty();
@@ -58,6 +64,24 @@ public class FolderPickerService {
             return pickDirectoryWithJavaUi(initialDirectory, title);
         }
         throw new BusinessException("无法打开文件夹选择器，请确认在本机已登录图形界面");
+    }
+
+    /**
+     * Windows 桌面环境：优先同进程 Swing 对话框（javaw 下更可靠），失败时 PowerShell 兜底。
+     */
+    private Optional<Path> pickDirectoryOnWindowsDesktop(Path initialDirectory, String title) {
+        try {
+            return pickDirectoryWithJavaUi(initialDirectory, title);
+        } catch (BusinessException ex) {
+            NativePickOutcome fallback = pickDirectoryWithWindowsPowerShell(initialDirectory, title);
+            if (fallback.status() == NativePickStatus.CANCELLED) {
+                return Optional.empty();
+            }
+            if (fallback.status() == NativePickStatus.SELECTED && fallback.path() != null) {
+                return Optional.of(fallback.path());
+            }
+            throw ex;
+        }
     }
 
     private NativePickOutcome tryNativeFolderPicker(Path initialDirectory, String title) {
@@ -105,14 +129,21 @@ public class FolderPickerService {
                             .redirectErrorStream(true)
                             .start();
             ProcessOutput output = readProcessOutput(process);
-            if (output.exitCode() == 0 && !output.text().isBlank()) {
-                return new NativePickOutcome(
-                        NativePickStatus.SELECTED, normalizePickedPath(output.text()));
-            }
-            return new NativePickOutcome(NativePickStatus.UNAVAILABLE, null);
+            return resolveWindowsPowerShellOutcome(output.exitCode(), output.text());
         } catch (IOException ex) {
             return new NativePickOutcome(NativePickStatus.UNAVAILABLE, null);
         }
+    }
+
+    static NativePickOutcome resolveWindowsPowerShellOutcome(int exitCode, String output) {
+        if (exitCode == WINDOWS_PICK_CANCEL_EXIT_CODE) {
+            return new NativePickOutcome(NativePickStatus.CANCELLED, null);
+        }
+        if (exitCode == 0 && output != null && !output.isBlank()) {
+            return new NativePickOutcome(
+                    NativePickStatus.SELECTED, normalizePickedPath(output));
+        }
+        return new NativePickOutcome(NativePickStatus.UNAVAILABLE, null);
     }
 
     static String buildMacOsChooseFolderScript(Path initialDirectory, String title) {
@@ -130,6 +161,7 @@ public class FolderPickerService {
 
     static String buildWindowsChooseFolderCommand(Path initialDirectory, String title) {
         StringBuilder command = new StringBuilder();
+        command.append("[System.Windows.Forms.Application]::EnableVisualStyles(); ");
         command.append("Add-Type -AssemblyName System.Windows.Forms; ");
         command.append("$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; ");
         command.append("$dialog.Description = '").append(escapePowerShellSingleQuoted(title)).append("'; ");
@@ -140,8 +172,10 @@ public class FolderPickerService {
                     .append(escapePowerShellSingleQuoted(initialDirectory.toAbsolutePath().normalize().toString()))
                     .append("'; ");
         }
+        command.append("$result = $dialog.ShowDialog(); ");
         command.append(
-                "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath }");
+                "if ($result -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $dialog.SelectedPath; exit 0 }; ");
+        command.append("exit ").append(WINDOWS_PICK_CANCEL_EXIT_CODE);
         return command.toString();
     }
 
@@ -221,6 +255,7 @@ public class FolderPickerService {
     }
 
     private Optional<Path> pickDirectoryWithJFileChooser(Path initialDirectory, String title) {
+        Frame owner = createDialogOwnerFrame();
         try {
             applySystemLookAndFeel();
             JFileChooser chooser = new JFileChooser();
@@ -234,17 +269,30 @@ public class FolderPickerService {
             if (initialDirectory != null && Files.isDirectory(initialDirectory)) {
                 chooser.setCurrentDirectory(initialDirectory.toFile());
             }
-            int result = chooser.showOpenDialog(null);
+            int result = chooser.showOpenDialog(owner);
             if (result != JFileChooser.APPROVE_OPTION || chooser.getSelectedFile() == null) {
                 return Optional.empty();
             }
             return Optional.of(chooser.getSelectedFile().toPath().toAbsolutePath().normalize());
         } catch (HeadlessException ex) {
             throw new BusinessException("当前环境无法打开文件夹选择器，请确认在本机图形界面下运行");
+        } finally {
+            owner.dispose();
         }
     }
 
-    private Path normalizePickedPath(String rawPath) {
+    /** 提供置顶父窗口，避免对话框被浏览器遮挡 */
+    private Frame createDialogOwnerFrame() {
+        Frame frame = new Frame();
+        frame.setUndecorated(true);
+        frame.setSize(0, 0);
+        frame.setLocationRelativeTo(null);
+        frame.setAlwaysOnTop(true);
+        frame.setVisible(true);
+        return frame;
+    }
+
+    private static Path normalizePickedPath(String rawPath) {
         String trimmed = rawPath == null ? "" : rawPath.trim();
         if (trimmed.endsWith("/") && trimmed.length() > 1) {
             trimmed = trimmed.substring(0, trimmed.length() - 1);

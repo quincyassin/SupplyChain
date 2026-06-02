@@ -229,6 +229,15 @@ export function formatLocalDateKey(date: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
+/** 导出目录日期层级：年/月/日，与后端 ExportPathHelper 一致 */
+export function formatExportDateFolderPath(exportDate: string): string {
+  const [year, month, day] = exportDate.split("-");
+  if (!year || !month || !day) {
+    return exportDate;
+  }
+  return `${year}/${month}/${day}`;
+}
+
 export interface PlatformTemplateSummary {
   platform: string;
   templateFileName?: string | null;

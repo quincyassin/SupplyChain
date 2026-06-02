@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.util;
 
 import java.nio.file.Path;
+import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -31,5 +32,21 @@ class ExportPathHelperTest {
         assertThrows(
                 com.ecommerce.ordersplit.exception.BusinessException.class,
                 () -> ExportPathHelper.normalizeExportRoot("/tmp/bad\0path"));
+    }
+
+    @Test
+    void resolveDateDirectory_shouldUseYearMonthDayFolders() {
+        LocalDate date = LocalDate.of(2026, 5, 30);
+        Path root = Path.of("/tmp/exports");
+        Path result = ExportPathHelper.resolveDateDirectory(root, date);
+        assertEquals(
+                Path.of("/tmp/exports/2026/05/30").toString().replace('\\', '/'),
+                result.toString().replace('\\', '/'));
+    }
+
+    @Test
+    void formatDateFolderRelativePath_shouldUseYearMonthDaySegments() {
+        LocalDate date = LocalDate.of(2026, 5, 30);
+        assertEquals("2026/05/30", ExportPathHelper.formatDateFolderRelativePath(date));
     }
 }

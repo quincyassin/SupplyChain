@@ -19,6 +19,7 @@ import {
   exportMerchantReconcile,
   exportPlatformReconcile,
   fetchImportedOrdersByDateRange,
+  formatExportDateFolderPath,
   formatLocalDateKey,
   openReconcileExportDirectory,
   PENDING_SPLIT_MERCHANT,
@@ -255,8 +256,8 @@ export default function ReconcilePage() {
     const folderHint =
       result.exportMode === "SERVER_DIRECTORY" && exportDate
         ? reconcileExportFolderOpened
-          ? `，已打开 ${result.exportDirectory ?? "导出目录"}/${exportDate}/对账`
-          : `，已导出到 ${result.exportDirectory ?? "导出目录"}/${exportDate}/对账`
+          ? `，已打开 ${result.exportDirectory ?? "导出目录"}/${formatExportDateFolderPath(exportDate)}/对账`
+          : `，已导出到 ${result.exportDirectory ?? "导出目录"}/${formatExportDateFolderPath(exportDate)}/对账`
         : "";
     message.success(`已导出${targetLabel}对账数据${folderHint}`);
   };

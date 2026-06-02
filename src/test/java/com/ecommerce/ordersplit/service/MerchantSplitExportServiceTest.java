@@ -9,6 +9,7 @@ import com.ecommerce.ordersplit.model.ColumnMappingConfig;
 import com.ecommerce.ordersplit.model.ColumnMappingItem;
 import com.ecommerce.ordersplit.model.OrderFieldKey;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
+import com.ecommerce.ordersplit.util.ExportPathHelper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.time.LocalDate;
@@ -92,7 +93,7 @@ class MerchantSplitExportServiceTest {
                 new java.io.ByteArrayInputStream(zipBytes))) {
             var entry = zipInputStream.getNextEntry();
             assertTrue(entry != null);
-            assertTrue(entry.getName().startsWith(today + "/分单/"));
+            assertTrue(entry.getName().startsWith(ExportPathHelper.formatDateFolderRelativePath(today) + "/分单/"));
             assertTrue(entry.getName().contains("商家A-" + today));
         }
     }
@@ -128,7 +129,7 @@ class MerchantSplitExportServiceTest {
                 new java.io.ByteArrayInputStream(zipBytes))) {
             var entry = zipInputStream.getNextEntry();
             assertTrue(entry != null);
-            assertTrue(entry.getName().startsWith(today + "/分单/"));
+            assertTrue(entry.getName().startsWith(ExportPathHelper.formatDateFolderRelativePath(today) + "/分单/"));
             assertTrue(entry.getName().endsWith(".xlsx"));
             assertTrue(entry.getName().contains("商家A-" + today));
         }
@@ -175,7 +176,7 @@ class MerchantSplitExportServiceTest {
                 new java.io.ByteArrayInputStream(zipBytes))) {
             var entry = zipInputStream.getNextEntry();
             assertTrue(entry != null);
-            assertTrue(entry.getName().startsWith(today + "/回单/"));
+            assertTrue(entry.getName().startsWith(ExportPathHelper.formatDateFolderRelativePath(today) + "/回单/"));
             assertTrue(entry.getName().contains("客莱拿-" + today + ".xlsx"));
         }
         assertEquals(1, service.countReceiptExports(today, today));

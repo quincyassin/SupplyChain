@@ -6,6 +6,7 @@ import com.ecommerce.ordersplit.entity.ImportOrder;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.model.ImportOrderReceiptStatus;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
+import com.ecommerce.ordersplit.util.ExportPathHelper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -382,7 +383,12 @@ public class MerchantSplitExportService {
                 fileName = buildMerchantPlatformDateFileName(merchant, platform, exportDate, batchSuffix);
                 usedFileNames.add(fileName);
             }
-            String zipEntryPath = exportDate + "/" + exportKind.subDir + "/" + fileName;
+            String zipEntryPath =
+                    ExportPathHelper.formatDateFolderRelativePath(exportDate)
+                            + "/"
+                            + exportKind.subDir
+                            + "/"
+                            + fileName;
             String sheetTitle = merchant + dateLabel + exportKind.sheetTitleSuffix;
             entries.add(
                     new MerchantExportEntry(
@@ -455,7 +461,12 @@ public class MerchantSplitExportService {
         List<DailyTableRowDto> rows = group.rows();
         String platform = group.platform();
         String fileName = buildPlatformDateFileName(platform, exportDate);
-        String zipEntryPath = exportDate + "/" + ExportKind.RECEIPT.subDir + "/" + fileName;
+        String zipEntryPath =
+                ExportPathHelper.formatDateFolderRelativePath(exportDate)
+                        + "/"
+                        + ExportKind.RECEIPT.subDir
+                        + "/"
+                        + fileName;
         String dateLabel = exportDate.format(DATE_FOLDER);
         String sheetTitle = platform + dateLabel + ExportKind.RECEIPT.sheetTitleSuffix;
         PlatformExportTemplateDto exportTemplate =
@@ -542,7 +553,11 @@ public class MerchantSplitExportService {
                 usedFileNames.add(fileName);
             }
             String zipEntryPath =
-                    normalized + "/" + exportKind.subDir + "/" + fileName;
+                    ExportPathHelper.formatDateFolderRelativePath(normalized)
+                            + "/"
+                            + exportKind.subDir
+                            + "/"
+                            + fileName;
             String sheetTitle = merchant + dateLabel + exportKind.sheetTitleSuffix;
             PlatformExportTemplateDto exportTemplate = null;
             if (exportKind.requirePlatformTemplate) {
@@ -861,7 +876,8 @@ public class MerchantSplitExportService {
     }
 
     Path resolveDateRootDir(LocalDate date) {
-        return exportSettingsService.getExportRootPath().resolve(date.format(DATE_FOLDER));
+        return ExportPathHelper.resolveDateDirectory(
+                exportSettingsService.getExportRootPath(), date);
     }
 
     Path resolveSplitExportDir(LocalDate date) {
