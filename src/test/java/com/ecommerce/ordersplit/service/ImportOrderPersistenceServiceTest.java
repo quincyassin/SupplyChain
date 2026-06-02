@@ -395,6 +395,59 @@ class ImportOrderPersistenceServiceTest {
   }
 
   @Test
+  void reassignAllPendingOrders_shouldMatchByProductKeywords() {
+    ImportOrder matched = new ImportOrder();
+    matched.setSystemNo(SYSTEM_NO_1);
+    matched.setMerchant(MerchantConfigService.PENDING_SPLIT_MERCHANT);
+    matched.setProductName("匹配商品");
+    matched.setSourceRowNum(2);
+    matched.setIssueDate(LocalDate.now(ZoneId.of("Asia/Shanghai")).atStartOfDay());
+
+    ImportOrder unmatched = new ImportOrder();
+    unmatched.setSystemNo(SYSTEM_NO_2);
+    unmatched.setMerchant(MerchantConfigService.PENDING_SPLIT_MERCHANT);
+    unmatched.setProductName("未知商品");
+    unmatched.setSourceRowNum(3);
+    unmatched.setIssueDate(LocalDate.now(ZoneId.of("Asia/Shanghai")).atStartOfDay());
+
+    when(importOrderRepository.findOrdersWithoutAssignedMerchant(
+            MerchantConfigService.PENDING_SPLIT_MERCHANT,
+            MerchantConfigService.UNMATCHED_MERCHANT_NAME))
+        .thenReturn(List.of(matched, unmatched));
+    when(merchantConfigService.resolveByProductName("匹配商品")).thenReturn("商家A");
+    when(merchantConfigService.resolveByProductName("未知商品"))
+        .thenReturn(MerchantConfigService.UNMATCHED_MERCHANT_NAME);
+    when(orderSplitMergeService.groupByMerchant(ArgumentMatchers.anyList()))
+        .thenReturn(
+            Map.of(
+                "商家A",
+                List.of(
+                    OrderRow.builder()
+                        .merchant("商家A")
+                        .productName("匹配商品")
+                        .sourceRowNum(2)
+                        .systemNo(SYSTEM_NO_1)
+                        .build()),
+                MerchantConfigService.PENDING_SPLIT_MERCHANT,
+                List.of(
+                    OrderRow.builder()
+                        .merchant(MerchantConfigService.PENDING_SPLIT_MERCHANT)
+                        .productName("未知商品")
+                        .sourceRowNum(3)
+                        .systemNo(SYSTEM_NO_2)
+                        .build())));
+
+    var result = persistenceService.reassignAllPendingOrders();
+
+    assertEquals(2, result.scannedOrderCount());
+    assertEquals(1, result.matchedOrderCount());
+    assertEquals(1, result.stillPendingOrderCount());
+    assertEquals("商家A", matched.getMerchant());
+    assertEquals(MerchantConfigService.PENDING_SPLIT_MERCHANT, unmatched.getMerchant());
+    verify(importOrderRepository).saveAll(List.of(matched, unmatched));
+  }
+
+  @Test
   void assignPendingMerchantsInRange_shouldKeepPreviouslyAssignedMerchant() {
     LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
     LocalDateTime issueDate = today.atStartOfDay().plusHours(10);
@@ -436,7 +489,7 @@ class ImportOrderPersistenceServiceTest {
     AssignMerchantPersistenceResult result =
         persistenceService.assignPendingMerchantsInRange(today, today);
 
-    assertEquals(2, result.processedCount());
+    assertEquals(1, result.processedCount());
     assertEquals("旧商家", assigned.getMerchant());
     assertEquals("OLD-001", assigned.getOrderNo());
     assertEquals("新商家", pending.getMerchant());

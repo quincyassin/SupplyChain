@@ -254,6 +254,12 @@ export interface MerchantConfigItem {
   name: string;
   keywords: string[];
   updatedAt?: string;
+  /** 新增后自动重分单：扫描的未定义订单数 */
+  reassignedScannedCount?: number;
+  /** 新增后自动重分单：成功匹配商家的订单数 */
+  reassignedMatchedCount?: number;
+  /** 新增后自动重分单：仍为未定义的订单数 */
+  reassignedStillPendingCount?: number;
 }
 
 export interface SaveMerchantConfigPayload {
@@ -541,13 +547,14 @@ export async function deleteSelectedImportedOrders(
 
 export async function batchUpdateReceipt(
   content: string,
-  date: string,
+  startDate: string,
+  endDate: string,
 ): Promise<BatchReceiptResult> {
   try {
     const { data } = await client.post<BatchReceiptResult>(
       "/imported/receipt/batch",
       { content },
-      { params: { date } },
+      { params: { startDate, endDate } },
     );
     return data;
   } catch (error) {
@@ -623,8 +630,16 @@ export async function deletePlatformTemplate(platform: string): Promise<void> {
 
 export async function fetchMerchantConfigs(): Promise<MerchantConfigItem[]> {
   try {
-    const { data } =
-      await client.get<MerchantConfigItem[]>("/merchant-configs");
+    const { data } = await client.get<MerchantConfigItem[]>(
+      "/merchant-configs",
+      {
+        params: { _: Date.now() },
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      },
+    );
     return data;
   } catch (error) {
     throw new Error(await extractApiErrorMessage(error));

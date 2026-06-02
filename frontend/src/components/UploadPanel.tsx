@@ -83,12 +83,6 @@ interface UploadPanelProps {
   onProcessed?: () => void;
 }
 
-/** 与后端 ImportOrderQueryService.MAX_IMPORT_HISTORY_DAYS 一致（顶部分单日期选择） */
-const MAX_SPLIT_HISTORY_DAYS = 365;
-
-/** 与后端 ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS 一致 */
-const MAX_SPLIT_RANGE_SPAN_DAYS = 365;
-
 /** 与后端 ImportOrderQueryService.UNKNOWN_PLATFORM 一致 */
 const UNKNOWN_PLATFORM = "未记录平台";
 
@@ -464,8 +458,7 @@ function merchantHasRowsUnderPlatform(
 function isSelectableSplitDate(value: Dayjs): boolean {
   const day = value.startOf("day");
   const today = dayjs().startOf("day");
-  const earliest = today.subtract(MAX_SPLIT_HISTORY_DAYS - 1, "day");
-  return !day.isBefore(earliest) && !day.isAfter(today);
+  return !day.isAfter(today);
 }
 
 function rowKeyOf(row: SplitTableRow, merchant: string): string {
@@ -1333,7 +1326,6 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   const hasActiveSearchKeyword = searchKeyword.trim() !== "";
 
   const isSingleDayQuery = queryDateRange.start === queryDateRange.end;
-  const singleQueryDate = isSingleDayQuery ? queryDateRange.start : null;
 
   const isPendingMerchantSplit = useMemo(
     () => hasPendingMerchantSplit(orderDataset),
@@ -1589,17 +1581,11 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         !isSelectableSplitDate(values[0]) ||
         !isSelectableSplitDate(values[1])
       ) {
-        message.warning(`分单日期仅可选择最近一年内的日期`);
+        message.warning("分单日期不能晚于今天");
         return;
       }
       const start = values[0].format("YYYY-MM-DD");
       const end = values[1].format("YYYY-MM-DD");
-      const rangeSpanDays =
-        values[1].startOf("day").diff(values[0].startOf("day"), "day") + 1;
-      if (rangeSpanDays > MAX_SPLIT_RANGE_SPAN_DAYS) {
-        message.warning(`分单日期区间不能超过 ${MAX_SPLIT_RANGE_SPAN_DAYS} 天`);
-        return;
-      }
       if (queryDateRange.start === start && queryDateRange.end === end) {
         return;
       }
@@ -2074,10 +2060,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   };
 
   const handleSubmitReceipt = async () => {
-    if (!isSingleDayQuery || singleQueryDate == null) {
-      message.warning("批量回单请选择单日日期区间");
-      return;
-    }
+    const range = queryDateRangeRef.current;
     if (!receiptContent.trim()) {
       message.warning("请输入回单数据");
       return;
@@ -2085,7 +2068,11 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     setReceiptSubmitting(true);
     setErrorAlert(null);
     try {
-      const result = await batchUpdateReceipt(receiptContent, singleQueryDate);
+      const result = await batchUpdateReceipt(
+        receiptContent,
+        range.start,
+        range.end,
+      );
       setOrderDataset((prev) => {
         if (prev == null) {
           return prev;
@@ -2853,7 +2840,6 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                       size="middle"
                       icon={<PlusOutlined />}
                       onClick={() => setReceiptModalOpen(true)}
-                      disabled={!isSingleDayQuery}
                     >
                       填写物流信息
                     </Button>
@@ -3111,6 +3097,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         }}
       >
         <Typography.Paragraph type="secondary" style={{ marginBottom: 8 }}>
+          将在所选分单日期区间（{platformExportRangeLabel}）内按系统单号匹配订单并更新物流信息。
           每行录入一条物流信息，包含系统单号、物流单号、物流公司即可（顺序不限，系统自动识别）。同一系统单号可填写多个物流单号，中文或英文逗号均可分隔。
         </Typography.Paragraph>
         <Input.TextArea

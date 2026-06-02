@@ -34,28 +34,35 @@ public class ImportOrderReceiptService {
     private final ImportOrderQueryService importOrderQueryService;
 
     @Transactional
-    public BatchReceiptResponse batchUpdateReceipt(LocalDate date, String content) {
-        LocalDate viewDate = importOrderQueryService.requireRecentDate(date);
+    public BatchReceiptResponse batchUpdateReceipt(
+            LocalDate startDate, LocalDate endDate, String content) {
+        LocalDate normalizedStart = importOrderQueryService.requireRecentDate(startDate);
+        LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
+        if (normalizedStart.isAfter(normalizedEnd)) {
+            throw new BusinessException("开始日期不能晚于结束日期");
+        }
+
         List<ReceiptLine> lines = ReceiptBatchParser.parse(content);
 
-        LocalDateTime start = viewDate.atStartOfDay();
-        LocalDateTime end = viewDate.plusDays(1).atStartOfDay();
+        LocalDateTime start = normalizedStart.atStartOfDay();
+        LocalDateTime end = normalizedEnd.plusDays(1).atStartOfDay();
 
-        List<ImportOrder> dayOrders = importOrderRepository
-                .findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByPlatformAscMerchantAscSystemNoAsc(
-                        start, end);
+        List<ImportOrder> rangeOrders =
+                importOrderRepository
+                        .findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByPlatformAscMerchantAscSystemNoAsc(
+                                start, end);
         Map<String, ImportOrder> ordersBySystemNo = new LinkedHashMap<>();
-    for (ImportOrder order : dayOrders) {
-      String systemNo = SystemNoGenerator.matchKey(order);
-      if (!systemNo.isBlank()) {
-        ordersBySystemNo.put(SystemNoGenerator.normalize(systemNo), order);
-      }
-    }
+        for (ImportOrder order : rangeOrders) {
+            String systemNo = SystemNoGenerator.matchKey(order);
+            if (!systemNo.isBlank()) {
+                ordersBySystemNo.put(SystemNoGenerator.normalize(systemNo), order);
+            }
+        }
 
-    int updatedCount = 0;
-    Set<String> notFoundSystemNos = new LinkedHashSet<>();
-    for (ReceiptLine line : lines) {
-      String systemNoKey = SystemNoGenerator.normalize(line.systemNo());
+        int updatedCount = 0;
+        Set<String> notFoundSystemNos = new LinkedHashSet<>();
+        for (ReceiptLine line : lines) {
+            String systemNoKey = SystemNoGenerator.normalize(line.systemNo());
             ImportOrder order = ordersBySystemNo.get(systemNoKey);
             if (order == null) {
                 notFoundSystemNos.add(line.systemNo());
@@ -68,10 +75,12 @@ public class ImportOrderReceiptService {
         }
 
         if (updatedCount == 0) {
-            throw new BusinessException("未匹配到任何订单，请确认系统单号与当前分单日期一致");
+            throw new BusinessException("未匹配到任何订单，请确认系统单号在所选分单日期区间内");
         }
 
-        SplitResultResponse refreshed = importOrderQueryService.listOrdersByDate(viewDate, null);
+        SplitResultResponse refreshed =
+                importOrderQueryService.listOrdersByDateRange(
+                        normalizedStart, normalizedEnd, null);
         return new BatchReceiptResponse(
                 updatedCount,
                 lines.size(),

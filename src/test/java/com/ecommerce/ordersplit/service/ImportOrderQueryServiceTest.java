@@ -92,7 +92,7 @@ class ImportOrderQueryServiceTest {
   }
 
   @Test
-  void listRecentDateSummaries_shouldReturnTenDays() {
+  void listRecentDateSummaries_shouldReturnFifteenDays() {
     when(importOrderRepository.countByIssueDateGreaterThanEqualAndIssueDateLessThan(any(), any()))
         .thenReturn(0L);
 
@@ -167,22 +167,42 @@ class ImportOrderQueryServiceTest {
   }
 
   @Test
-  void listOrdersByDateRange_shouldRejectRangeSpanTooLong() {
+  void listOrdersByDateRange_shouldAcceptLongRange() {
     LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
-    LocalDate start = today.minusDays(ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS);
-    org.junit.jupiter.api.Assertions.assertThrows(
-        com.ecommerce.ordersplit.exception.BusinessException.class,
-        () -> queryService.listOrdersByDateRange(start, today, null));
+    LocalDate start = today.minusDays(400);
+
+    when(importOrderPagedQueryService.findAllOrders(any())).thenReturn(List.of());
+    when(importOrderPagedQueryService.summarizeByMerchant(any())).thenReturn(List.of());
+    when(importOrderPagedQueryService.summarizeByPlatform(any(), any(), any(), any()))
+        .thenReturn(List.of());
+
+    SplitResultResponse response = queryService.listOrdersByDateRange(start, today, null);
+
+    assertEquals(start + " ~ " + today, response.getIssueDate());
   }
 
   @Test
-  void listOrdersByDate_shouldRejectDateOutsideWindow() {
-    LocalDate tooOld =
-        LocalDate.now(ZoneId.of("Asia/Shanghai"))
-            .minusDays(ImportOrderQueryService.MAX_IMPORT_HISTORY_DAYS + 1);
+  void listOrdersByDate_shouldAcceptHistoricalDate() {
+    LocalDate oldDate = LocalDate.now(ZoneId.of("Asia/Shanghai")).minusDays(400);
+
+    when(importOrderPagedQueryService.findAllOrders(any()))
+        .thenReturn(List.of(buildOrder("V1StGXR8Z5jdHi6B", "淘宝", "商家A")));
+    when(importOrderPagedQueryService.summarizeByMerchant(any()))
+        .thenReturn(List.of(new MerchantSplitGroupDto("商家A", 1, 0, List.of())));
+    when(importOrderPagedQueryService.summarizeByPlatform(any(), any(), any(), any()))
+        .thenReturn(List.of(new PlatformSummaryDto("淘宝", 1, 0)));
+
+    SplitResultResponse response = queryService.listOrdersByDate(oldDate, null);
+
+    assertEquals(oldDate.toString(), response.getIssueDate());
+  }
+
+  @Test
+  void listOrdersByDate_shouldRejectFutureDate() {
+    LocalDate tomorrow = LocalDate.now(ZoneId.of("Asia/Shanghai")).plusDays(1);
     org.junit.jupiter.api.Assertions.assertThrows(
         com.ecommerce.ordersplit.exception.BusinessException.class,
-        () -> queryService.listOrdersByDate(tooOld, null));
+        () -> queryService.listOrdersByDate(tomorrow, null));
   }
 
   @Test

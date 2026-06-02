@@ -15,6 +15,7 @@ import com.ecommerce.ordersplit.dto.TaskResponse;
 import com.ecommerce.ordersplit.dto.MarkAfterSalesRequest;
 import com.ecommerce.ordersplit.dto.UpdateImportedOrderFieldsRequest;
 import com.ecommerce.ordersplit.dto.UpdateOrderMerchantRequest;
+import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.service.OrderProcessService;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -71,7 +72,7 @@ public class OrderController {
     }
 
     /**
-     * 按分单日期或日期区间查询已入库订单（历史最多一年）
+     * 按分单日期或日期区间查询已入库订单
      */
     @GetMapping("/imported")
     public ResponseEntity<SplitResultResponse> listImportedByDate(
@@ -170,13 +171,30 @@ public class OrderController {
     }
 
     /**
-     * 批量维护回单（按系统单号匹配当日订单，更新物流信息与回单状态）
+     * 批量维护回单（按系统单号匹配所选分单日期区间内的订单，更新物流信息与回单状态）
      */
     @PostMapping("/imported/receipt/batch")
     public ResponseEntity<BatchReceiptResponse> batchReceipt(
             @RequestBody BatchReceiptRequest request,
-            @RequestParam("date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(orderProcessService.batchUpdateReceipt(request, date));
+            @RequestParam(value = "startDate", required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate startDate,
+            @RequestParam(value = "endDate", required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate endDate,
+            @RequestParam(value = "date", required = false)
+                    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+                    LocalDate date) {
+        LocalDate resolvedStart = startDate != null ? startDate : date;
+        LocalDate resolvedEnd = endDate != null ? endDate : resolvedStart;
+        if (resolvedStart == null) {
+            throw new BusinessException("请指定分单日期");
+        }
+        if (resolvedEnd == null) {
+            resolvedEnd = resolvedStart;
+        }
+        return ResponseEntity.ok(
+                orderProcessService.batchUpdateReceipt(request, resolvedStart, resolvedEnd));
     }
 
     /**

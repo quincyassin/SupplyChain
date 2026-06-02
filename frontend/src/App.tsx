@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Alert, Layout, Menu, Spin, Typography } from "antd";
 import {
   AccountBookOutlined,
+  BookOutlined,
   CustomerServiceOutlined,
   DollarOutlined,
   HomeOutlined,
@@ -12,16 +13,39 @@ import AfterSalesPage from "./pages/AfterSalesPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import ProductPricePage from "./pages/ProductPricePage";
 import ConfigPage from "./pages/ConfigPage";
+import UserManualPage from "./pages/UserManualPage";
 import { fetchLicenseStatus, type LicenseStatus } from "./api/licenseApi";
+import type { ManualModuleKey } from "./content/userManualSections";
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
 
-type AppMenuKey = "orders" | "reconcile" | "after-sales" | "product-prices" | "config";
+type AppMenuKey =
+  | "orders"
+  | "reconcile"
+  | "after-sales"
+  | "product-prices"
+  | "config"
+  | "manual";
+
+type BusinessMenuKey = Exclude<AppMenuKey, "manual">;
+
+function resolveManualModuleKey(businessMenu: BusinessMenuKey): ManualModuleKey {
+  if (businessMenu === "config") {
+    return "header-mapping";
+  }
+  return businessMenu;
+}
 
 export default function App() {
   const [activeMenu, setActiveMenu] = useState<AppMenuKey>("orders");
-  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(null);
+  const [lastBusinessMenu, setLastBusinessMenu] =
+    useState<BusinessMenuKey>("orders");
+  const [manualModuleKey, setManualModuleKey] =
+    useState<ManualModuleKey>("orders");
+  const [licenseStatus, setLicenseStatus] = useState<LicenseStatus | null>(
+    null,
+  );
   const [licenseLoading, setLicenseLoading] = useState(true);
 
   const loadLicenseStatus = useCallback(async () => {
@@ -49,7 +73,9 @@ export default function App() {
     setLicenseStatus(status);
   }, []);
 
-  const needActivate = Boolean(licenseStatus?.enforced && !licenseStatus.licensed);
+  const needActivate = Boolean(
+    licenseStatus?.enforced && !licenseStatus.licensed,
+  );
 
   if (licenseLoading) {
     return (
@@ -62,9 +88,6 @@ export default function App() {
   return (
     <Layout className="app-layout">
       <Header className="app-header">
-        <Title level={5} className="app-header-title">
-          分单发单助手
-        </Title>
         <Menu
           className="app-top-menu"
           mode="horizontal"
@@ -83,9 +106,22 @@ export default function App() {
               label: "商品价格维护",
             },
             { key: "config", icon: <SettingOutlined />, label: "系统配置" },
+            { key: "manual", icon: <BookOutlined />, label: "使用手册" },
           ]}
-          onClick={({ key }) => setActiveMenu(key as AppMenuKey)}
+          onClick={({ key }) => {
+            const menuKey = key as AppMenuKey;
+            if (menuKey === "manual") {
+              setManualModuleKey(resolveManualModuleKey(lastBusinessMenu));
+              setActiveMenu("manual");
+              return;
+            }
+            setLastBusinessMenu(menuKey);
+            setActiveMenu(menuKey);
+          }}
         />
+        <Title level={5} className="app-header-title">
+          分单发单助手
+        </Title>
       </Header>
       {needActivate ? (
         <Alert
@@ -98,7 +134,7 @@ export default function App() {
       ) : null}
       <Content
         className={
-          activeMenu === "config"
+          activeMenu === "config" || activeMenu === "manual"
             ? "page-container page-container-config"
             : "page-container"
         }
@@ -112,6 +148,9 @@ export default function App() {
             initialKey={needActivate ? "license" : undefined}
             onLicenseActivated={handleActivated}
           />
+        )}
+        {activeMenu === "manual" && (
+          <UserManualPage initialModuleKey={manualModuleKey} />
         )}
       </Content>
     </Layout>

@@ -5,6 +5,7 @@ import com.ecommerce.ordersplit.dto.SaveMerchantConfigRequest;
 import com.ecommerce.ordersplit.service.MerchantConfigService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.CacheControl;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -29,7 +30,9 @@ public class MerchantConfigController {
 
   @GetMapping
   public ResponseEntity<List<MerchantConfigDto>> list() {
-    return ResponseEntity.ok(merchantConfigService.listAll());
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .body(merchantConfigService.listAll());
   }
 
   @PostMapping

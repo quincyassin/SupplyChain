@@ -7,7 +7,6 @@ import com.ecommerce.ordersplit.model.AfterSalesStatus;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -92,11 +91,6 @@ public class AfterSalesExportService {
         LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
         if (normalizedStart.isAfter(normalizedEnd)) {
             throw new BusinessException("开始日期不能晚于结束日期");
-        }
-        long rangeSpanDays = ChronoUnit.DAYS.between(normalizedStart, normalizedEnd) + 1;
-        if (rangeSpanDays > ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS) {
-            throw new BusinessException(
-                    "日期区间不能超过 " + ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS + " 天");
         }
     }
 

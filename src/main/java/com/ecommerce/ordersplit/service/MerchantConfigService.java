@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.dto.MerchantConfigDto;
+import com.ecommerce.ordersplit.dto.ReassignPendingOrdersResult;
 import com.ecommerce.ordersplit.dto.SaveMerchantConfigRequest;
 import com.ecommerce.ordersplit.entity.MerchantConfig;
 import com.ecommerce.ordersplit.exception.BusinessException;
@@ -11,7 +12,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import lombok.RequiredArgsConstructor;
+import java.util.Optional;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
  * @author huangxinsong
  */
 @Service
-@RequiredArgsConstructor
 public class MerchantConfigService {
 
   public static final String UNMATCHED_MERCHANT_NAME = "未匹配";
@@ -30,7 +31,17 @@ public class MerchantConfigService {
   public static final String PENDING_SPLIT_MERCHANT = "未定义";
 
   private final MerchantConfigRepository merchantConfigRepository;
+  private final ImportOrderPersistenceService importOrderPersistenceService;
   private final ObjectMapper objectMapper;
+
+  public MerchantConfigService(
+      MerchantConfigRepository merchantConfigRepository,
+      @Lazy ImportOrderPersistenceService importOrderPersistenceService,
+      ObjectMapper objectMapper) {
+    this.merchantConfigRepository = merchantConfigRepository;
+    this.importOrderPersistenceService = importOrderPersistenceService;
+    this.objectMapper = objectMapper;
+  }
 
   @Transactional(readOnly = true)
   public List<MerchantConfigDto> listAll() {
@@ -92,15 +103,23 @@ public class MerchantConfigService {
   public MerchantConfigDto create(SaveMerchantConfigRequest request) {
     String name = normalizeName(request == null ? null : request.getName());
     List<String> keywords = normalizeKeywords(request == null ? null : request.getKeywords());
-    if (merchantConfigRepository.existsByName(name)) {
-      throw new BusinessException("商家「" + name + "」已存在");
+    Optional<MerchantConfig> existing = merchantConfigRepository.findByName(name);
+    if (existing.isPresent()) {
+      MerchantConfig entity = existing.get();
+      if (entity.getVisibility() == MerchantConfigVisibility.VISIBLE) {
+        throw new BusinessException("商家「" + name + "」已存在");
+      }
+      entity.setKeywordsJson(writeKeywords(keywords));
+      entity.setVisibility(MerchantConfigVisibility.VISIBLE);
+      merchantConfigRepository.save(entity);
+      return toDtoWithReassign(entity);
     }
     MerchantConfig entity = new MerchantConfig();
     entity.setName(name);
     entity.setKeywordsJson(writeKeywords(keywords));
     entity.setVisibility(MerchantConfigVisibility.VISIBLE);
     merchantConfigRepository.save(entity);
-    return toDto(entity);
+    return toDtoWithReassign(entity);
   }
 
   @Transactional
@@ -108,8 +127,15 @@ public class MerchantConfigService {
     MerchantConfig entity = getRequiredVisible(id);
     String name = normalizeName(request == null ? null : request.getName());
     List<String> keywords = normalizeKeywords(request == null ? null : request.getKeywords());
-    if (!entity.getName().equals(name) && merchantConfigRepository.existsByName(name)) {
-      throw new BusinessException("商家「" + name + "」已存在");
+    if (!entity.getName().equals(name)) {
+      Optional<MerchantConfig> nameConflict = merchantConfigRepository.findByName(name);
+      if (nameConflict.isPresent()) {
+        MerchantConfig other = nameConflict.get();
+        if (other.getVisibility() == MerchantConfigVisibility.VISIBLE) {
+          throw new BusinessException("商家「" + name + "」已存在");
+        }
+        merchantConfigRepository.delete(other);
+      }
     }
     entity.setName(name);
     entity.setKeywordsJson(writeKeywords(keywords));
@@ -137,8 +163,22 @@ public class MerchantConfigService {
   }
 
   private MerchantConfigDto toDto(MerchantConfig entity) {
-    return new MerchantConfigDto(
-        entity.getId(), entity.getName(), readKeywords(entity), entity.getUpdatedAt());
+    MerchantConfigDto dto = new MerchantConfigDto();
+    dto.setId(entity.getId());
+    dto.setName(entity.getName());
+    dto.setKeywords(readKeywords(entity));
+    dto.setUpdatedAt(entity.getUpdatedAt());
+    return dto;
+  }
+
+  private MerchantConfigDto toDtoWithReassign(MerchantConfig entity) {
+    ReassignPendingOrdersResult reassign =
+        importOrderPersistenceService.reassignAllPendingOrders();
+    MerchantConfigDto dto = toDto(entity);
+    dto.setReassignedScannedCount(reassign.scannedOrderCount());
+    dto.setReassignedMatchedCount(reassign.matchedOrderCount());
+    dto.setReassignedStillPendingCount(reassign.stillPendingOrderCount());
+    return dto;
   }
 
   private List<String> readKeywords(MerchantConfig entity) {

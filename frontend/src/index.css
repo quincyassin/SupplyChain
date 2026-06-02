@@ -68,14 +68,20 @@ body {
 
 .app-top-menu {
   flex: 1;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
   border-bottom: none;
   background: transparent;
 }
 
+.app-top-menu.ant-menu-horizontal > .ant-menu-overflow {
+  justify-content: flex-start;
+}
+
 .app-header-title {
   margin: 0 !important;
+  flex-shrink: 0;
+  white-space: nowrap;
   color: #111827 !important;
   font-weight: 600 !important;
 }
@@ -766,36 +772,80 @@ body {
   margin: 0 !important;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-pending
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action) {
   background: #fff1f0 !important;
   color: #cf1322;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending:hover > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-pending:hover
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action) {
   background: #ffe7e6 !important;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) .ant-typography:not(.order-table-empty-hint) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-pending
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action)
+  .ant-typography:not(.order-table-empty-hint) {
   color: #cf1322 !important;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-completed > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-completed
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action) {
   background: #f6ffed !important;
   color: #389e0d;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-completed:hover > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-completed:hover
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action) {
   background: #eaffea !important;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-completed > td:not(.ant-table-selection-column):not(.order-table-col-receipt-status):not(.order-table-col-action) .ant-typography:not(.order-table-empty-hint) {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-completed
+  > td:not(.ant-table-selection-column):not(
+    .order-table-col-receipt-status
+  ):not(.order-table-col-action)
+  .ant-typography:not(.order-table-empty-hint) {
   color: #389e0d !important;
 }
 
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending > td.order-table-col-receipt-status,
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-pending > td.order-table-col-action,
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-completed > td.order-table-col-receipt-status,
-.table-scroll-viewport .ant-table-tbody > tr.after-sales-row-completed > td.order-table-col-action {
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-pending
+  > td.order-table-col-receipt-status,
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-pending
+  > td.order-table-col-action,
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-completed
+  > td.order-table-col-receipt-status,
+.table-scroll-viewport
+  .ant-table-tbody
+  > tr.after-sales-row-completed
+  > td.order-table-col-action {
   background: #fff !important;
   color: rgba(0, 0, 0, 0.88);
 }
@@ -864,4 +914,44 @@ body {
 
 .order-detail-descriptions .ant-descriptions-view {
   font-size: 15px;
+}
+
+.manual-layout {
+  min-width: 0;
+}
+
+.manual-content-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.manual-section-intro {
+  margin-bottom: 16px !important;
+}
+
+.manual-item {
+  margin-bottom: 20px;
+}
+
+.manual-item-title {
+  margin-top: 0 !important;
+  margin-bottom: 8px !important;
+  color: #374151 !important;
+}
+
+.manual-item-paragraph {
+  margin-bottom: 8px !important;
+  color: #4b5563;
+}
+
+.manual-item-list {
+  margin: 0 0 8px;
+  padding-left: 20px;
+  color: #4b5563;
+}
+
+.manual-item-list li + li {
+  margin-top: 6px;
 }

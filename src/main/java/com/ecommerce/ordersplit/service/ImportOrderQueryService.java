@@ -15,7 +15,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -39,13 +38,7 @@ public class ImportOrderQueryService {
     public static final String UNKNOWN_PLATFORM = "未记录平台";
 
     /** 左侧快捷日期列表：最近 N 天（含今天） */
-    public static final int SIDEBAR_IMPORT_DAYS = 10;
-
-    /** 分单日期选择/查询的历史窗口（天，含今天，最多一年） */
-    public static final int MAX_IMPORT_HISTORY_DAYS = 365;
-
-    /** 单次查询日期区间最大跨度（天） */
-    public static final int MAX_IMPORT_RANGE_SPAN_DAYS = 365;
+    public static final int SIDEBAR_IMPORT_DAYS = 15;
 
     /** 关键字搜索最大长度 */
     private static final int KEYWORD_MAX_LENGTH = 64;
@@ -161,7 +154,7 @@ public class ImportOrderQueryService {
     }
 
     /**
-     * 按分单日期区间查询已入库订单（历史最多一年，单次区间跨度最多一年）
+     * 按分单日期区间查询已入库订单
      */
     @Transactional(readOnly = true)
     public SplitResultResponse listOrdersByDateRange(
@@ -170,7 +163,7 @@ public class ImportOrderQueryService {
     }
 
     /**
-     * 按分单日期区间查询已入库订单（历史最多一年，单次区间跨度最多一年）
+     * 按分单日期区间查询已入库订单
      */
     @Transactional(readOnly = true)
     public SplitResultResponse listOrdersByDateRange(
@@ -180,7 +173,7 @@ public class ImportOrderQueryService {
     }
 
     /**
-     * 按分单日期区间查询已入库订单（历史最多一年，单次区间跨度最多一年）
+     * 按分单日期区间查询已入库订单
      */
     @Transactional(readOnly = true)
     public SplitResultResponse listOrdersByDateRange(
@@ -203,7 +196,7 @@ public class ImportOrderQueryService {
     }
 
     /**
-     * 按分单日期区间查询已入库订单（历史最多一年，单次区间跨度最多一年）
+     * 按分单日期区间查询已入库订单
      */
     @Transactional(readOnly = true)
     public SplitResultResponse listOrdersByDateRange(
@@ -228,7 +221,7 @@ public class ImportOrderQueryService {
     }
 
     /**
-     * 按分单日期区间查询已入库订单（历史最多一年，单次区间跨度最多一年）
+     * 按分单日期区间查询已入库订单
      */
     @Transactional(readOnly = true)
     public SplitResultResponse listOrdersByDateRange(
@@ -245,10 +238,6 @@ public class ImportOrderQueryService {
         LocalDate normalizedEnd = requireRecentDate(endDate);
         if (normalizedStart.isAfter(normalizedEnd)) {
             throw new BusinessException("开始日期不能晚于结束日期");
-        }
-        long rangeSpanDays = ChronoUnit.DAYS.between(normalizedStart, normalizedEnd) + 1;
-        if (rangeSpanDays > MAX_IMPORT_RANGE_SPAN_DAYS) {
-            throw new BusinessException("日期区间不能超过 " + MAX_IMPORT_RANGE_SPAN_DAYS + " 天");
         }
         LocalDateTime start = normalizedStart.atStartOfDay();
         LocalDateTime end = normalizedEnd.plusDays(1).atStartOfDay();
@@ -381,9 +370,8 @@ public class ImportOrderQueryService {
             throw new BusinessException("日期参数无效");
         }
         LocalDate today = LocalDate.now(ZONE_SHANGHAI);
-        LocalDate earliest = today.minusDays(MAX_IMPORT_HISTORY_DAYS - 1L);
-        if (date.isBefore(earliest) || date.isAfter(today)) {
-            throw new BusinessException("仅支持查询最近 " + MAX_IMPORT_HISTORY_DAYS + " 天内的订单");
+        if (date.isAfter(today)) {
+            throw new BusinessException("日期不能晚于今天");
         }
         return date;
     }

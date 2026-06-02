@@ -1,6 +1,7 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.dto.AssignMerchantPersistenceResult;
+import com.ecommerce.ordersplit.dto.ReassignPendingOrdersResult;
 import com.ecommerce.ordersplit.dto.DailyTableRowDto;
 import com.ecommerce.ordersplit.dto.UpdateImportedOrderFieldsRequest;
 import com.ecommerce.ordersplit.entity.ImportOrder;
@@ -285,48 +286,76 @@ public class ImportOrderPersistenceService {
         }
 
         List<ImportOrder> pendingOrders = new ArrayList<>();
-        List<OrderRow> rowsForSplit = new ArrayList<>();
-        int unmatchedPendingCount = 0;
         for (ImportOrder order : ordersInRange) {
-            if (hasAssignedMerchant(order)) {
-                continue;
+            if (!hasAssignedMerchant(order)) {
+                pendingOrders.add(order);
             }
-            pendingOrders.add(order);
+        }
+        ReassignPendingOrdersResult reassignResult = reassignPendingOrders(pendingOrders);
+        return new AssignMerchantPersistenceResult(
+                reassignResult.scannedOrderCount(),
+                reassignResult.stillPendingOrderCount(),
+                ordersInRange);
+    }
+
+    /**
+     * 对全库尚未归属具体商家的订单，按当前商家关键字配置重新分单（不导出 Excel）
+     */
+    @Transactional
+    public ReassignPendingOrdersResult reassignAllPendingOrders() {
+        List<ImportOrder> pendingOrders =
+                importOrderRepository.findOrdersWithoutAssignedMerchant(
+                        MerchantConfigService.PENDING_SPLIT_MERCHANT,
+                        MerchantConfigService.UNMATCHED_MERCHANT_NAME);
+        return reassignPendingOrders(pendingOrders);
+    }
+
+    private ReassignPendingOrdersResult reassignPendingOrders(List<ImportOrder> pendingOrders) {
+        if (pendingOrders == null || pendingOrders.isEmpty()) {
+            return new ReassignPendingOrdersResult(0, 0, 0);
+        }
+
+        List<OrderRow> rowsForSplit = new ArrayList<>();
+        int stillPendingCount = 0;
+        for (ImportOrder order : pendingOrders) {
             OrderRow row = toOrderRow(order);
             String merchant = merchantConfigService.resolveByProductName(row.getProductName());
             if (MerchantConfigService.UNMATCHED_MERCHANT_NAME.equals(merchant)) {
                 row.setMerchant(MerchantConfigService.PENDING_SPLIT_MERCHANT);
-                unmatchedPendingCount++;
+                stillPendingCount++;
             } else {
                 row.setMerchant(merchant);
             }
             rowsForSplit.add(row);
         }
 
-        if (!rowsForSplit.isEmpty()) {
-            Map<String, List<OrderRow>> splitResult =
-                    orderSplitMergeService.groupByMerchant(rowsForSplit);
-            Map<String, OrderRow> splitBySystemNo = new HashMap<>();
-            for (List<OrderRow> rows : splitResult.values()) {
-                for (OrderRow row : rows) {
-                    if (row.getSystemNo() != null && !row.getSystemNo().isBlank()) {
-                        splitBySystemNo.put(row.getSystemNo(), row);
-                    }
+        int matchedCount = 0;
+        Map<String, List<OrderRow>> splitResult =
+                orderSplitMergeService.groupByMerchant(rowsForSplit);
+        Map<String, OrderRow> splitBySystemNo = new HashMap<>();
+        for (List<OrderRow> rows : splitResult.values()) {
+            for (OrderRow row : rows) {
+                if (row.getSystemNo() != null && !row.getSystemNo().isBlank()) {
+                    splitBySystemNo.put(row.getSystemNo(), row);
                 }
             }
-
-            for (ImportOrder entity : pendingOrders) {
-                OrderRow assigned = splitBySystemNo.get(entity.getSystemNo());
-                if (assigned == null) {
-                    continue;
-                }
-                entity.setMerchant(assigned.getMerchant());
-                entity.setMerchantSplit(true);
-            }
-            importOrderRepository.saveAll(pendingOrders);
         }
-        return new AssignMerchantPersistenceResult(
-                ordersInRange.size(), unmatchedPendingCount, ordersInRange);
+
+        for (ImportOrder entity : pendingOrders) {
+            OrderRow assigned = splitBySystemNo.get(entity.getSystemNo());
+            if (assigned == null) {
+                continue;
+            }
+            String assignedMerchant = assigned.getMerchant();
+            if (!MerchantConfigService.PENDING_SPLIT_MERCHANT.equals(assignedMerchant)) {
+                matchedCount++;
+            }
+            entity.setMerchant(assignedMerchant);
+            entity.setMerchantSplit(true);
+        }
+        importOrderRepository.saveAll(pendingOrders);
+        return new ReassignPendingOrdersResult(
+                pendingOrders.size(), matchedCount, stillPendingCount);
     }
 
     private boolean hasAssignedMerchant(ImportOrder order) {

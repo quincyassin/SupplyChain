@@ -27,10 +27,6 @@ import {
 
 const { RangePicker } = DatePicker;
 
-/** 与首页一致：分单日期最多一年 */
-const MAX_SPLIT_HISTORY_DAYS = 365;
-const MAX_SPLIT_RANGE_SPAN_DAYS = 365;
-
 type ReconcileMode = "merchant" | "platform";
 
 interface DateRangeKey {
@@ -52,8 +48,7 @@ function createTodayDateRange(): DateRangeKey {
 function isSelectableSplitDate(value: Dayjs): boolean {
   const day = value.startOf("day");
   const today = dayjs().startOf("day");
-  const earliest = today.subtract(MAX_SPLIT_HISTORY_DAYS - 1, "day");
-  return !day.isBefore(earliest) && !day.isAfter(today);
+  return !day.isAfter(today);
 }
 
 function formatRangeLabel(range: DateRangeKey): string {
@@ -161,17 +156,11 @@ export default function ReconcilePage() {
         !isSelectableSplitDate(values[0]) ||
         !isSelectableSplitDate(values[1])
       ) {
-        message.warning("分单日期仅可选择最近一年内的日期");
+        message.warning("分单日期不能晚于今天");
         return;
       }
       const start = values[0].format("YYYY-MM-DD");
       const end = values[1].format("YYYY-MM-DD");
-      const rangeSpanDays =
-        values[1].startOf("day").diff(values[0].startOf("day"), "day") + 1;
-      if (rangeSpanDays > MAX_SPLIT_RANGE_SPAN_DAYS) {
-        message.warning(`分单日期区间不能超过 ${MAX_SPLIT_RANGE_SPAN_DAYS} 天`);
-        return;
-      }
       if (
         queryDateRangeRef.current.start === start &&
         queryDateRangeRef.current.end === end

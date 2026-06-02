@@ -21,7 +21,6 @@ import java.sql.Date;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -311,11 +310,6 @@ public class ImportOrderArchiveService {
         }
         if (startDate.isAfter(endDate)) {
             throw new BusinessException("开始日期不能晚于结束日期");
-        }
-        long rangeSpanDays = ChronoUnit.DAYS.between(startDate, endDate) + 1;
-        if (rangeSpanDays > ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS) {
-            throw new BusinessException(
-                    "日期区间不能超过 " + ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS + " 天");
         }
     }
 

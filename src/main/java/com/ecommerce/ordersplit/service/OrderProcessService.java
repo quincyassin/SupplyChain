@@ -248,9 +248,10 @@ public class OrderProcessService {
      * 批量维护回单信息
      */
     @Transactional
-    public BatchReceiptResponse batchUpdateReceipt(BatchReceiptRequest request, LocalDate date) {
+    public BatchReceiptResponse batchUpdateReceipt(
+            BatchReceiptRequest request, LocalDate startDate, LocalDate endDate) {
         String content = request == null ? null : request.getContent();
-        return importOrderReceiptService.batchUpdateReceipt(date, content);
+        return importOrderReceiptService.batchUpdateReceipt(startDate, endDate, content);
     }
 
     /**
@@ -363,12 +364,6 @@ public class OrderProcessService {
         LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
         if (normalizedStart.isAfter(normalizedEnd)) {
             throw new BusinessException("开始日期不能晚于结束日期");
-        }
-        long rangeSpanDays =
-                java.time.temporal.ChronoUnit.DAYS.between(normalizedStart, normalizedEnd) + 1;
-        if (rangeSpanDays > ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS) {
-            throw new BusinessException(
-                    "日期区间不能超过 " + ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS + " 天");
         }
         var persistenceResult =
                 importOrderPersistenceService.assignPendingMerchantsInRange(

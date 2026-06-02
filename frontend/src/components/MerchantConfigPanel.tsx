@@ -48,6 +48,49 @@ function keywordsToText(keywords: string[] | null | undefined): string {
   return keywords.join("\n");
 }
 
+function merchantUpdatedAtMs(item: MerchantConfigItem): number {
+  if (!item.updatedAt) {
+    return 0;
+  }
+  const ms = new Date(item.updatedAt).getTime();
+  return Number.isNaN(ms) ? 0 : ms;
+}
+
+/** 与后端 list 一致：按更新时间倒序 */
+function sortMerchantsByUpdatedAt(
+  list: MerchantConfigItem[],
+): MerchantConfigItem[] {
+  return [...list].sort(
+    (a, b) => merchantUpdatedAtMs(b) - merchantUpdatedAtMs(a),
+  );
+}
+
+/** 将保存接口返回的记录并入列表，避免列表 GET 缓存或时序导致少一条 */
+function upsertMerchantItem(
+  list: MerchantConfigItem[],
+  item: MerchantConfigItem,
+): MerchantConfigItem[] {
+  const rest = list.filter((row) => row.id !== item.id);
+  return sortMerchantsByUpdatedAt([item, ...rest]);
+}
+
+function buildCreateSuccessMessage(saved: MerchantConfigItem): string {
+  const scanned = saved.reassignedScannedCount ?? 0;
+  const matched = saved.reassignedMatchedCount ?? 0;
+  const stillPending = saved.reassignedStillPendingCount ?? 0;
+  if (scanned <= 0) {
+    return "已新增";
+  }
+  let message = `已新增，已扫描 ${scanned} 条未分单订单`;
+  if (matched > 0) {
+    message += `，${matched} 条已匹配到商家`;
+  }
+  if (stillPending > 0) {
+    message += `，${stillPending} 条仍为未定义`;
+  }
+  return message;
+}
+
 function buildInitialValues(
   editing: MerchantConfigItem | null,
 ): MerchantFormValues {
@@ -74,10 +117,26 @@ export default function MerchantConfigPanel() {
     enabled: !loading,
   });
 
+  const applyList = useCallback(
+    (list: MerchantConfigItem[], options?: { resetPage?: boolean }) => {
+      const sorted = sortMerchantsByUpdatedAt(list);
+      setItems(sorted);
+      setPage((prev) => {
+        if (options?.resetPage) {
+          return 1;
+        }
+        const maxPage = Math.max(1, Math.ceil(sorted.length / pageSize) || 1);
+        return Math.min(prev, maxPage);
+      });
+    },
+    [pageSize],
+  );
+
   const reload = useCallback(async () => {
     const list = await fetchMerchantConfigs();
-    setItems(list);
-  }, []);
+    applyList(list);
+    return list;
+  }, [applyList]);
 
   useEffect(() => {
     const init = async () => {
@@ -117,16 +176,13 @@ export default function MerchantConfigPanel() {
     setSaving(true);
     try {
       const payload = { name: values.name.trim(), keywords };
-      if (editing) {
-        await updateMerchantConfig(editing.id, payload);
-        message.success("已更新");
-      } else {
-        await createMerchantConfig(payload);
-        message.success("已新增");
-        setPage(1);
-      }
+      const saved = editing
+        ? await updateMerchantConfig(editing.id, payload)
+        : await createMerchantConfig(payload);
+      message.success(editing ? "已更新" : buildCreateSuccessMessage(saved));
       closeModal();
-      await reload();
+      const list = await fetchMerchantConfigs();
+      applyList(upsertMerchantItem(list, saved), { resetPage: !editing });
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "保存失败");
     } finally {

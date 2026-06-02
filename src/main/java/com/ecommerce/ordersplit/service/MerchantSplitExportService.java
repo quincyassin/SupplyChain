@@ -15,7 +15,6 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -411,11 +410,6 @@ public class MerchantSplitExportService {
         LocalDate normalizedEnd = importOrderQueryService.requireRecentDate(endDate);
         if (normalizedStart.isAfter(normalizedEnd)) {
             throw new BusinessException("开始日期不能晚于结束日期");
-        }
-        long rangeSpanDays = ChronoUnit.DAYS.between(normalizedStart, normalizedEnd) + 1;
-        if (rangeSpanDays > ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS) {
-            throw new BusinessException(
-                    "日期区间不能超过 " + ImportOrderQueryService.MAX_IMPORT_RANGE_SPAN_DAYS + " 天");
         }
 
         LocalDate normalizedExportDate = importOrderQueryService.requireRecentDate(exportDate);
