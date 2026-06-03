@@ -44,5 +44,44 @@ pause
 exit /b 1
 
 :open_browser
-start "" "http://localhost:8080"
+set "APP_URL=http://127.0.0.1:8080"
+echo 服务已就绪，正在打开浏览器...
+
+REM 360 浏览器在 Win10 上 http 协议关联常异常，优先按安装路径直接启动
+if exist "%ProgramFiles(x86)%\360\360se6\Application\360se.exe" (
+    start "" "%ProgramFiles(x86)%\360\360se6\Application\360se.exe" "%APP_URL%"
+    goto open_browser_done
+)
+if exist "%ProgramFiles%\360\360se6\Application\360se.exe" (
+    start "" "%ProgramFiles%\360\360se6\Application\360se.exe" "%APP_URL%"
+    goto open_browser_done
+)
+if exist "%ProgramFiles(x86)%\360\360se\Application\360se.exe" (
+    start "" "%ProgramFiles(x86)%\360\360se\Application\360se.exe" "%APP_URL%"
+    goto open_browser_done
+)
+if exist "%ProgramFiles(x86)%\360\360Chrome\Chrome\Application\360chrome.exe" (
+    start "" "%ProgramFiles(x86)%\360\360Chrome\Chrome\Application\360chrome.exe" "%APP_URL%"
+    goto open_browser_done
+)
+if exist "%LOCALAPPDATA%\360Chrome\Chrome\Application\360chrome.exe" (
+    start "" "%LOCALAPPDATA%\360Chrome\Chrome\Application\360chrome.exe" "%APP_URL%"
+    goto open_browser_done
+)
+
+rundll32 url.dll,FileProtocolHandler "%APP_URL%"
+powershell -NoProfile -Command "Start-Process '%APP_URL%'" >nul 2>&1
+if exist "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" (
+    start "" "%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe" "%APP_URL%"
+    goto open_browser_done
+)
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" (
+    start "" "%ProgramFiles%\Google\Chrome\Application\chrome.exe" "%APP_URL%"
+    goto open_browser_done
+)
+
+echo [提示] 无法自动打开浏览器，请手动访问 %APP_URL%
+pause
+
+:open_browser_done
 exit /b 0
