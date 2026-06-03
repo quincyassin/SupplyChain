@@ -24,6 +24,12 @@ class SqlLikeUtilTest {
     }
 
     @Test
+    void toContainsPattern_shouldEscapeBackslash() {
+        assertEquals("%\\\\%", SqlLikeUtil.toContainsPattern("\\"));
+        assertEquals("%a\\\\b%", SqlLikeUtil.toContainsPattern("a\\b"));
+    }
+
+    @Test
     void toContainsPattern_shouldReturnNullForBlank() {
         assertNull(SqlLikeUtil.toContainsPattern(null));
         assertNull(SqlLikeUtil.toContainsPattern("   "));

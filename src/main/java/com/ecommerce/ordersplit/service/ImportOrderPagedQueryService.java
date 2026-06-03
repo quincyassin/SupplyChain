@@ -26,11 +26,11 @@ public class ImportOrderPagedQueryService {
 
     private static final String KEYWORD_WHERE = """
              AND (
-               o.merchant LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.platform, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.system_no, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.logistics_no, '') LIKE :likePattern ESCAPE '\\\\'
-               OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
+               o.merchant LIKE :likePattern
+               OR IFNULL(o.platform, '') LIKE :likePattern
+               OR IFNULL(o.system_no, '') LIKE :likePattern
+               OR IFNULL(o.logistics_no, '') LIKE :likePattern
+               OR IFNULL(o.order_no, '') LIKE :likePattern
              )
             """;
 

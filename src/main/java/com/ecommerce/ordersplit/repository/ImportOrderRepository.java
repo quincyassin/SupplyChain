@@ -105,11 +105,11 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
             WHERE o.issue_date >= :startInclusive
               AND o.issue_date < :endExclusive
               AND (
-                o.merchant LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.platform, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.system_no, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.logistics_no, '') LIKE :likePattern ESCAPE '\\\\'
-                OR IFNULL(o.order_no, '') LIKE :likePattern ESCAPE '\\\\'
+                o.merchant LIKE :likePattern
+                OR IFNULL(o.platform, '') LIKE :likePattern
+                OR IFNULL(o.system_no, '') LIKE :likePattern
+                OR IFNULL(o.logistics_no, '') LIKE :likePattern
+                OR IFNULL(o.order_no, '') LIKE :likePattern
               )
             ORDER BY o.platform ASC, o.merchant ASC, o.system_no ASC
             """, nativeQuery = true)
