@@ -21,6 +21,14 @@ function Write-Step([string]$Message) {
     Write-Host "==> $Message" -ForegroundColor Cyan
 }
 
+function Write-WindowsTextFile([string]$SourcePath, [string]$DestPath) {
+    $content = Get-Content -Path $SourcePath -Raw -Encoding UTF8
+    $content = $content -replace "`r`n", "`n"
+    $content = $content -replace "`n", "`r`n"
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    [System.IO.File]::WriteAllText($DestPath, $content, $utf8NoBom)
+}
+
 function Invoke-Checked([string]$Label, [scriptblock]$Block) {
     Write-Host "--- $Label"
     & $Block
@@ -94,8 +102,20 @@ Copy-Item $JarFile.FullName (Join-Path $StagingDir "app\order-split-merge.jar") 
 Copy-Item -Recurse $CachedJreSource (Join-Path $StagingDir "jre") -Force
 
 $PackagingDir = Join-Path $RootDir "packaging\windows"
-Copy-Item (Join-Path $PackagingDir "start.bat") $StagingDir -Force
-Copy-Item (Join-Path $PackagingDir "stop.bat") $StagingDir -Force
+$WindowsScripts = @(
+    "start.bat",
+    "stop.bat",
+    "wait-ready.ps1",
+    "open-browser.ps1",
+    "stop-service.ps1"
+)
+foreach ($scriptName in $WindowsScripts) {
+    $sourcePath = Join-Path $PackagingDir $scriptName
+    if (-not (Test-Path $sourcePath)) {
+        throw "staging 缺少源脚本: packaging\windows\$scriptName"
+    }
+    Write-WindowsTextFile $sourcePath (Join-Path $StagingDir $scriptName)
+}
 Copy-Item (Join-Path $PackagingDir "README.txt") $StagingDir -Force
 
 Write-Host "staging 内容:"
@@ -108,6 +128,11 @@ if (-not (Test-Path (Join-Path $StagingDir "jre\bin\javaw.exe"))) {
 }
 if (-not (Test-Path (Join-Path $StagingDir "start.bat"))) {
     throw "staging 缺少 start.bat"
+}
+foreach ($scriptName in $WindowsScripts) {
+    if (-not (Test-Path (Join-Path $StagingDir $scriptName))) {
+        throw "staging 缺少 $scriptName"
+    }
 }
 
 if ($SkipInstaller) {
