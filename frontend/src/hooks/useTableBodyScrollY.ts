@@ -62,8 +62,53 @@ function measureByGeometry(viewport: HTMLElement): number | null {
   return Math.floor(bodySpace);
 }
 
+function sumOccupiedHeightAboveViewport(viewport: HTMLElement): number {
+  let occupied = 0;
+  let sibling = viewport.previousElementSibling;
+  while (sibling) {
+    if (sibling instanceof HTMLElement) {
+      occupied += sibling.getBoundingClientRect().height;
+      const style = window.getComputedStyle(sibling);
+      occupied += Number.parseFloat(style.marginTop) || 0;
+      occupied += Number.parseFloat(style.marginBottom) || 0;
+    }
+    sibling = sibling.previousElementSibling;
+  }
+  return occupied;
+}
+
+function resolveMeasureHeight(viewport: HTMLElement): number {
+  const panelBody = viewport.closest(".table-panel-body");
+  if (panelBody instanceof HTMLElement && panelBody.clientHeight > 0) {
+    const availableHeight =
+      panelBody.clientHeight - sumOccupiedHeightAboveViewport(viewport);
+    if (availableHeight > 0) {
+      // viewport 尚未被 flex 撑开时，clientHeight 会跟随表格内容（偏小）
+      if (viewport.clientHeight >= availableHeight - 2) {
+        return viewport.clientHeight;
+      }
+      return availableHeight;
+    }
+  }
+
+  const layoutPanel = viewport.closest(
+    ".table-panel, .after-sales-table-panel, .config-panel-table-area",
+  );
+  if (layoutPanel instanceof HTMLElement && layoutPanel.clientHeight > 0) {
+    const style = window.getComputedStyle(layoutPanel);
+    const paddingTop = Number.parseFloat(style.paddingTop) || 0;
+    const paddingBottom = Number.parseFloat(style.paddingBottom) || 0;
+    const innerHeight = layoutPanel.clientHeight - paddingTop - paddingBottom;
+    if (innerHeight > 0) {
+      return innerHeight;
+    }
+  }
+
+  return viewport.clientHeight;
+}
+
 function measureByContainer(viewport: HTMLElement): number | null {
-  const height = viewport.clientHeight;
+  const height = resolveMeasureHeight(viewport);
   if (height < MIN_BODY_HEIGHT + DEFAULT_PAGINATION_HEIGHT + PAGINATION_GAP) {
     return null;
   }
@@ -88,11 +133,17 @@ function measureByContainer(viewport: HTMLElement): number | null {
 }
 
 function measureScrollY(viewport: HTMLElement): number | null {
-  return measureByGeometry(viewport) ?? measureByContainer(viewport);
+  const byContainer = measureByContainer(viewport);
+  const byGeometry = measureByGeometry(viewport);
+  if (byContainer != null && byGeometry != null) {
+    return Math.max(byContainer, byGeometry);
+  }
+  return byContainer ?? byGeometry;
 }
 
 /**
- * 表格 body 可滚动高度：优先用表头与分页的实际间距测量，避免刷新后 flex 未就绪时算错。
+ * 表格 body 可滚动高度：优先按 flex 容器可用高度计算（无 Tab 时占满 panel-body；
+ * 首页有平台/商家 Tab 时会扣除 Tab 高度），几何测量仅作补充。
  */
 export function useTableBodyScrollY(
   containerRef: RefObject<HTMLElement | null>,
@@ -138,6 +189,9 @@ export function useTableBodyScrollY(
         ".table-panel, .after-sales-table-panel, .config-panel-table-area",
       );
       ensureObserve(layoutPanel);
+      ensureObserve(viewport.closest(".table-panel-body"));
+      ensureObserve(viewport.closest(".order-main-content"));
+      ensureObserve(viewport.closest(".order-main-layout"));
 
       ensureObserve(viewport.querySelector(".ant-table-thead"));
       ensureObserve(viewport.querySelector(".ant-table-pagination"));

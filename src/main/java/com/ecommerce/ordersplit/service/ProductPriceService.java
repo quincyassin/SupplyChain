@@ -280,15 +280,19 @@ public class ProductPriceService {
         return productSpecKey(productName, spec) + KEY_SEPARATOR + normalizePlatform(platform);
     }
 
-    String normalizeProductName(String productName) {
+    public String buildOrderProductKey(String platform, String productName, String spec) {
+        return productSpecPlatformKey(productName, spec, platform);
+    }
+
+    public String normalizeProductName(String productName) {
         return productName == null ? "" : productName.trim();
     }
 
-    String normalizeSpec(String spec) {
+    public String normalizeSpec(String spec) {
         return spec == null ? "" : spec.trim();
     }
 
-    String normalizePlatform(String platform) {
+    public String normalizePlatform(String platform) {
         return platform == null ? "" : platform.trim();
     }
 

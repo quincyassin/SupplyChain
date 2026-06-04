@@ -72,6 +72,41 @@ class ImportOrderPersistenceServiceTest {
   }
 
   @Test
+  void saveSplitOrders_shouldPersistLogisticsFields() {
+    Map<String, List<OrderRow>> split = new LinkedHashMap<>();
+    split.put(
+        "商家A",
+        List.of(
+            OrderRow.builder()
+                .orderNo("O001")
+                .merchant("商家A")
+                .productName("商品")
+                .sku("规格")
+                .quantity(1)
+                .receiver("张三")
+                .address("地址1")
+                .phone("13800000000")
+                .shippingFee(new BigDecimal("10"))
+                .logisticsNo("SF1234567890")
+                .logisticsCompany("顺丰")
+                .sourceRowNum(2)
+                .build()));
+
+    when(productPriceService.buildLookupForImport(anyList()))
+        .thenReturn(new ImportPriceLookup(Map.of(), Map.of()));
+
+    persistenceService.saveSplitOrders(
+        100L, "淘宝", split, new DailyTableService().currentIssueDateTime());
+
+    ArgumentCaptor<List<ImportOrder>> captor = ArgumentCaptor.forClass(List.class);
+    verify(importOrderRepository).saveAll(captor.capture());
+    ImportOrder row = captor.getValue().get(0);
+    assertEquals("SF1234567890", row.getLogisticsNo());
+    assertEquals("顺丰", row.getLogisticsCompany());
+    assertEquals(ImportOrderReceiptStatus.RECEIPTED, row.getReceiptStatus());
+  }
+
+  @Test
   void saveSplitOrders_shouldPersistRows() {
     Map<String, List<OrderRow>> split = new LinkedHashMap<>();
     split.put(

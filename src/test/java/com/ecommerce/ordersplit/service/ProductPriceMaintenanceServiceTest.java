@@ -3,8 +3,8 @@ package com.ecommerce.ordersplit.service;
 import com.ecommerce.ordersplit.dto.BatchDeleteProductPriceRequest;
 import com.ecommerce.ordersplit.dto.ProductPriceItemDto;
 import com.ecommerce.ordersplit.dto.SaveProductPriceRequest;
-import com.ecommerce.ordersplit.entity.ProductPrice;
 import com.ecommerce.ordersplit.exception.BusinessException;
+import com.ecommerce.ordersplit.service.OrderProductCatalogService.OrderProductPriceRow;
 import com.ecommerce.ordersplit.repository.ProductPriceRepository;
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,6 +31,7 @@ class ProductPriceMaintenanceServiceTest {
 
     @Mock private ProductPriceService productPriceService;
     @Mock private ProductPriceRepository productPriceRepository;
+    @Mock private OrderProductCatalogService orderProductCatalogService;
 
     @InjectMocks private ProductPriceMaintenanceService productPriceMaintenanceService;
 
@@ -94,18 +95,21 @@ class ProductPriceMaintenanceServiceTest {
     }
 
     @Test
-    void listProductPrices_shouldMapEntities() {
-        ProductPrice entity = new ProductPrice();
-        entity.setPlatform("淘宝");
-        entity.setProductName("商品A");
-        entity.setSpec("规格1");
-        entity.setCostPrice(new BigDecimal("10"));
-        entity.setSupplyPrice(new BigDecimal("15"));
-        when(productPriceRepository.search(isNull())).thenReturn(List.of(entity));
+    void listProductPrices_shouldMapOrderCatalogRows() {
+        when(orderProductCatalogService.listDistinctProductsWithPrices(isNull()))
+                .thenReturn(
+                        List.of(
+                                new OrderProductPriceRow(
+                                        "淘宝",
+                                        "商品A",
+                                        "规格1",
+                                        new BigDecimal("10"),
+                                        new BigDecimal("15"))));
 
         var items = productPriceMaintenanceService.listProductPrices(null);
 
         assertEquals(1, items.size());
         assertEquals("商品A", items.get(0).getProductName());
+        assertEquals(new BigDecimal("10"), items.get(0).getCostPrice());
     }
 }

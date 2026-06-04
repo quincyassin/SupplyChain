@@ -33,6 +33,10 @@ public class OrderRow {
   private String remark;
   /** 售后原因（Excel 导入映射） */
   private String afterSalesRemark;
+  /** 物流单号（Excel 导入映射） */
+  private String logisticsNo;
+  /** 物流公司（Excel 导入映射） */
+  private String logisticsCompany;
   /** 原始 Excel 行号，便于追溯 */
   private int sourceRowNum;
   /** 系统编号（持久化订单匹配用） */

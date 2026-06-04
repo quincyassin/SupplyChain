@@ -4,7 +4,6 @@ import com.ecommerce.ordersplit.dto.BatchDeleteProductPriceRequest;
 import com.ecommerce.ordersplit.dto.BatchDeleteProductPriceResult;
 import com.ecommerce.ordersplit.dto.ProductPriceItemDto;
 import com.ecommerce.ordersplit.dto.SaveProductPriceRequest;
-import com.ecommerce.ordersplit.entity.ProductPrice;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.repository.ProductPriceRepository;
 import com.ecommerce.ordersplit.util.SqlLikeUtil;
@@ -26,11 +25,12 @@ public class ProductPriceMaintenanceService {
 
     private final ProductPriceService productPriceService;
     private final ProductPriceRepository productPriceRepository;
+    private final OrderProductCatalogService orderProductCatalogService;
 
     @Transactional(readOnly = true)
     public List<ProductPriceItemDto> listProductPrices(String keyword) {
-        return productPriceRepository
-                .search(toContainsPattern(keyword))
+        return orderProductCatalogService
+                .listDistinctProductsWithPrices(toContainsPattern(keyword))
                 .stream()
                 .map(this::toItemDto)
                 .toList();
@@ -91,13 +91,13 @@ public class ProductPriceMaintenanceService {
                 platform, productName, spec);
     }
 
-    private ProductPriceItemDto toItemDto(ProductPrice entity) {
+    private ProductPriceItemDto toItemDto(OrderProductCatalogService.OrderProductPriceRow row) {
         return ProductPriceItemDto.builder()
-                .platform(entity.getPlatform())
-                .productName(entity.getProductName())
-                .spec(entity.getSpec())
-                .costPrice(entity.getCostPrice())
-                .supplyPrice(entity.getSupplyPrice())
+                .platform(row.platform())
+                .productName(row.productName())
+                .spec(row.spec())
+                .costPrice(row.costPrice())
+                .supplyPrice(row.supplyPrice())
                 .build();
     }
 

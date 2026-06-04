@@ -12,6 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.DataFormatter;
@@ -58,6 +59,7 @@ public class ProductPriceExcelImportService {
             Map.entry("supplyprice", "supplyPrice"));
 
     private final ProductPriceService productPriceService;
+    private final OrderProductCatalogService orderProductCatalogService;
 
     public ResponseEntity<Resource> buildImportTemplateResponse() {
         byte[] bytes = buildImportTemplateBytes();
@@ -91,6 +93,7 @@ public class ProductPriceExcelImportService {
         int importedCount = 0;
         int skippedCount = 0;
         List<String> errors = new ArrayList<>();
+        Set<String> orderProductKeys = orderProductCatalogService.loadAllOrderProductKeys();
 
         try (InputStream inputStream = file.getInputStream();
                 Workbook workbook = WorkbookFactory.create(inputStream)) {
@@ -126,6 +129,12 @@ public class ProductPriceExcelImportService {
                             readPriceCell(row, columnIndex.get("supplyPrice"), "供货价");
                     if (costPrice == null && supplyPrice == null) {
                         throw new BusinessException("成本价和供货价至少填写一项");
+                    }
+                    String orderKey =
+                            productPriceService.buildOrderProductKey(
+                                    platform, productName, spec);
+                    if (!orderProductKeys.contains(orderKey)) {
+                        throw new BusinessException("未匹配到订单，已跳过");
                     }
                     productPriceService.upsertImportedRow(
                             platform, productName, spec, costPrice, supplyPrice);

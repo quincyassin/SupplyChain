@@ -190,6 +190,9 @@ public class ExcelParserService {
                     .remark(getFieldString(row, fieldIndexMap, OrderFieldKey.REMARK))
                     .afterSalesRemark(
                             getFieldString(row, fieldIndexMap, OrderFieldKey.AFTER_SALES_REMARK))
+                    .logisticsNo(getFieldString(row, fieldIndexMap, OrderFieldKey.LOGISTICS_NO))
+                    .logisticsCompany(
+                            getFieldString(row, fieldIndexMap, OrderFieldKey.LOGISTICS_COMPANY))
                     .sourceRowNum(i + 1)
                     .build();
             fillAmountIfMissing(orderRow);

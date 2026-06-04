@@ -52,6 +52,8 @@ public class DailyTableService {
               .phone(nullToEmpty(source.getPhone()))
               .shippingFee(source.getShippingFee() == null ? BigDecimal.ZERO : source.getShippingFee())
               .remark(nullToEmpty(source.getRemark()))
+              .logisticsNo(nullToEmpty(source.getLogisticsNo()))
+              .logisticsCompany(nullToEmpty(source.getLogisticsCompany()))
               .issueDate(issueDate)
               .build());
     }

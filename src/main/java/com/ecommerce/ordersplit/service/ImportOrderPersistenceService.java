@@ -398,6 +398,8 @@ public class ImportOrderPersistenceService {
                 .address(order.getAddress())
                 .phone(order.getPhone())
                 .shippingFee(order.getShippingFee())
+                .logisticsNo(order.getLogisticsNo())
+                .logisticsCompany(order.getLogisticsCompany())
                 .sourceRowNum(order.getSourceRowNum() == null ? 0 : order.getSourceRowNum())
                 .systemNo(order.getSystemNo())
                 .build();
@@ -465,6 +467,20 @@ public class ImportOrderPersistenceService {
     private String normalizeLogisticsNo(String value) {
         String normalized = LogisticsNoUtil.normalize(value);
         return normalizeOptionalField(normalized, 128, "物流单号");
+    }
+
+    private String normalizeImportedLogisticsNo(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return normalizeLogisticsNo(value);
+    }
+
+    private String normalizeImportedLogisticsCompany(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return normalizeOptionalField(value, 128, "物流公司");
     }
 
     private String normalizeOptionalField(String value, int maxLength, String label) {
@@ -565,8 +581,11 @@ public class ImportOrderPersistenceService {
         entity.setPhone(normalizePhone(display.getPhone()));
         entity.setShippingFee(normalizeShippingFee(display.getShippingFee()));
         entity.setRemark(display.getRemark());
+        entity.setLogisticsNo(normalizeImportedLogisticsNo(source.getLogisticsNo()));
+        entity.setLogisticsCompany(normalizeImportedLogisticsCompany(source.getLogisticsCompany()));
         applyImportedAfterSales(entity, source.getAfterSalesRemark(), issueDateTime);
         entity.setReceiptStatus(ImportOrderReceiptStatus.PENDING);
+        applyReceiptStatusIfLogisticsComplete(entity);
         entity.setIssueDate(issueDateTime);
         entity.setSourceRowNum(source.getSourceRowNum() > 0 ? source.getSourceRowNum() : null);
         return entity;

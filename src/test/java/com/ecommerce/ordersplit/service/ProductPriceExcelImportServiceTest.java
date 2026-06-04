@@ -24,6 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class ProductPriceExcelImportServiceTest {
 
     @Mock private ProductPriceService productPriceService;
+    @Mock private OrderProductCatalogService orderProductCatalogService;
 
     @InjectMocks private ProductPriceExcelImportService productPriceExcelImportService;
 

@@ -2,10 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Button,
-  Form,
+  Checkbox,
   Input,
-  InputNumber,
-  Modal,
   Popconfirm,
   Space,
   Spin,
@@ -17,12 +15,10 @@ import type { InputRef } from "antd/es/input";
 import {
   DeleteOutlined,
   DownloadOutlined,
-  PlusOutlined,
   SearchOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 import type { ColumnsType, TableRowSelection } from "antd/es/table/interface";
-import type { FormInstance } from "antd/es/form";
 import {
   ProductPriceItem,
   SaveProductPricePayload,
@@ -38,14 +34,6 @@ import { useTableBodyScrollY } from "../hooks/useTableBodyScrollY";
 const EMPTY_PRICE_HINT_CLASS = "order-table-empty-hint";
 
 type ProductPriceFieldKey = "costPrice" | "supplyPrice";
-
-interface ProductPriceFormValues {
-  platform: string;
-  productName: string;
-  spec: string;
-  costPrice?: number;
-  supplyPrice?: number;
-}
 
 function normalizePriceValue(value: number | undefined): number | undefined {
   if (value == null || Number.isNaN(value)) {
@@ -86,14 +74,13 @@ function buildRowKey(row: ProductPriceItem): string {
   return `${row.platform}::${row.productName}::${row.spec}`;
 }
 
-function toSavePayload(values: ProductPriceFormValues): SaveProductPricePayload {
-  return {
-    platform: values.platform?.trim() ?? "",
-    productName: values.productName.trim(),
-    spec: values.spec.trim(),
-    costPrice: values.costPrice,
-    supplyPrice: values.supplyPrice,
-  };
+function isPriceMaintained(value: number | undefined): boolean {
+  return normalizePriceValue(value) != null;
+}
+
+/** 成本价或供货价任一未维护 */
+function isProductPriceUnmaintained(item: ProductPriceItem): boolean {
+  return !isPriceMaintained(item.costPrice) || !isPriceMaintained(item.supplyPrice);
 }
 
 function toSavePayloadFromRecord(
@@ -112,7 +99,11 @@ function toSavePayloadFromRecord(
 interface EditableProductPriceCellProps {
   fieldKey: ProductPriceFieldKey;
   record: ProductPriceItem;
-  onUpdated: (record: ProductPriceItem, fieldKey: ProductPriceFieldKey, price: number) => void;
+  onUpdated: (
+    record: ProductPriceItem,
+    fieldKey: ProductPriceFieldKey,
+    price: number,
+  ) => void;
 }
 
 function EditableProductPriceCell({
@@ -230,22 +221,24 @@ function EditableProductPriceCell({
 
 export default function ProductPricePage() {
   const [searchKeyword, setSearchKeyword] = useState("");
+  const [onlyUnmaintainedPrices, setOnlyUnmaintainedPrices] = useState(false);
   const searchKeywordRef = useRef("");
   const searchReadyRef = useRef(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [downloadingTemplate, setDownloadingTemplate] = useState(false);
   const [errorAlert, setErrorAlert] = useState<string | null>(null);
   const [items, setItems] = useState<ProductPriceItem[]>([]);
   const [selectedRowKeys, setSelectedRowKeys] = useState<string[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
   const [tablePage, setTablePage] = useState(1);
   const [tablePageSize, setTablePageSize] = useState(20);
-  const formRef = useRef<FormInstance<ProductPriceFormValues>>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const tableScrollViewportRef = useRef<HTMLDivElement>(null);
+  const getTableStickyContainer = useCallback(
+    () => tableScrollViewportRef.current ?? document.body,
+    [],
+  );
   const tableVisible = !(loading && items.length === 0);
   const tableScrollY = useTableBodyScrollY(tableScrollViewportRef, {
     enabled: tableVisible,
@@ -295,7 +288,11 @@ export default function ProductPricePage() {
   }, [searchKeyword, loadProductPrices]);
 
   const handleInlinePriceUpdated = useCallback(
-    (record: ProductPriceItem, fieldKey: ProductPriceFieldKey, price: number) => {
+    (
+      record: ProductPriceItem,
+      fieldKey: ProductPriceFieldKey,
+      price: number,
+    ) => {
       const rowKey = buildRowKey(record);
       setItems((prev) =>
         prev.map((item) =>
@@ -306,46 +303,22 @@ export default function ProductPricePage() {
     [],
   );
 
-  const closeModal = () => {
-    setModalOpen(false);
+  const displayItems = useMemo(() => {
+    if (!onlyUnmaintainedPrices) {
+      return items;
+    }
+    return items.filter(isProductPriceUnmaintained);
+  }, [items, onlyUnmaintainedPrices]);
+
+  const handleOnlyUnmaintainedPricesChange = (checked: boolean) => {
+    setOnlyUnmaintainedPrices(checked);
+    setTablePage(1);
+    setSelectedRowKeys([]);
   };
 
-  const openCreate = () => {
-    setModalOpen(true);
-  };
-
-  const handleModalOk = async () => {
-    const form = formRef.current;
-    if (!form) {
-      return;
-    }
-    let values: ProductPriceFormValues;
-    try {
-      values = await form.validateFields();
-    } catch {
-      return;
-    }
-    if (values.costPrice == null && values.supplyPrice == null) {
-      message.warning("请至少填写成本价或供货价");
-      return;
-    }
-    if (!values.productName?.trim()) {
-      message.warning("请输入商品名称");
-      return;
-    }
-
-    setSaving(true);
-    try {
-      await saveProductPrice(toSavePayload(values));
-      await loadProductPrices();
-      message.success("商品价格已保存");
-      closeModal();
-    } catch (err: unknown) {
-      message.error(err instanceof Error ? err.message : "保存失败");
-    } finally {
-      setSaving(false);
-    }
-  };
+  const tableEmptyText = onlyUnmaintainedPrices
+    ? "暂无未维护成本价或供货价的商品"
+    : "暂无订单商品，请先导入分单订单";
 
   const handleImportClick = () => {
     importInputRef.current?.click();
@@ -393,8 +366,9 @@ export default function ProductPricePage() {
   };
 
   const selectedItems = useMemo(
-    () => items.filter((item) => selectedRowKeys.includes(buildRowKey(item))),
-    [items, selectedRowKeys],
+    () =>
+      displayItems.filter((item) => selectedRowKeys.includes(buildRowKey(item))),
+    [displayItems, selectedRowKeys],
   );
 
   const handleBatchDelete = async () => {
@@ -474,14 +448,6 @@ export default function ProductPricePage() {
     [handleInlinePriceUpdated],
   );
 
-  const createInitialValues: ProductPriceFormValues = {
-    platform: "",
-    productName: "",
-    spec: "",
-    costPrice: undefined,
-    supplyPrice: undefined,
-  };
-
   return (
     <div className="after-sales-page">
       {errorAlert && (
@@ -506,9 +472,14 @@ export default function ProductPricePage() {
             onChange={(event) => setSearchKeyword(event.target.value)}
             style={{ width: 280 }}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
-            新增
-          </Button>
+          <Checkbox
+            checked={onlyUnmaintainedPrices}
+            onChange={(event) =>
+              handleOnlyUnmaintainedPricesChange(event.target.checked)
+            }
+          >
+            未维护价格
+          </Checkbox>
           <Button
             icon={<DownloadOutlined />}
             loading={downloadingTemplate}
@@ -553,90 +524,47 @@ export default function ProductPricePage() {
         </Space>
       </div>
 
-      <div className="after-sales-table-panel">
+      <div className="table-panel">
         {loading && items.length === 0 ? (
           <div className="table-loading">
             <Spin size="large" tip="正在加载商品价格..." />
           </div>
         ) : (
-          <div className="table-scroll-viewport" ref={tableScrollViewportRef}>
-            <Table
-              rowKey={buildRowKey}
-              bordered
-              size="small"
-              loading={loading}
-              rowSelection={rowSelection}
-              columns={columns}
-              dataSource={items}
-              scroll={{ x: 860, y: tableScrollY }}
-              locale={{ emptyText: "暂无商品价格配置" }}
-              pagination={{
-                current: tablePage,
-                pageSize: tablePageSize,
-                total: items.length,
-                showSizeChanger: true,
-                pageSizeOptions: ["10", "20", "50"],
-                showTotal: (total) => `共 ${total} 条`,
-                position: ["bottomRight"],
-                onChange: (page, pageSize) => {
-                  setTablePage(page);
-                  setTablePageSize(pageSize);
-                },
-              }}
-            />
+          <div className="table-panel-body">
+            <div className="table-scroll-viewport" ref={tableScrollViewportRef}>
+              <Table
+                rowKey={buildRowKey}
+                bordered
+                size="small"
+                tableLayout="fixed"
+                loading={loading}
+                rowSelection={rowSelection}
+                columns={columns}
+                dataSource={displayItems}
+                scroll={{ x: 860, y: tableScrollY }}
+                sticky={{
+                  offsetScroll: 0,
+                  getContainer: getTableStickyContainer,
+                }}
+                locale={{ emptyText: tableEmptyText }}
+                pagination={{
+                  current: tablePage,
+                  pageSize: tablePageSize,
+                  total: displayItems.length,
+                  showSizeChanger: true,
+                  pageSizeOptions: ["10", "20", "50"],
+                  showTotal: (total) => `共 ${total} 条`,
+                  position: ["bottomRight"],
+                  onChange: (page, pageSize) => {
+                    setTablePage(page);
+                    setTablePageSize(pageSize);
+                  },
+                }}
+              />
+            </div>
           </div>
         )}
       </div>
-
-      <Modal
-        title="新增商品价格"
-        open={modalOpen}
-        onOk={() => void handleModalOk()}
-        confirmLoading={saving}
-        onCancel={closeModal}
-        okText="保存"
-        cancelText="取消"
-        destroyOnClose
-      >
-        {modalOpen && (
-          <Form
-            key="create"
-            ref={formRef}
-            layout="vertical"
-            initialValues={createInitialValues}
-          >
-            <Form.Item name="platform" label="平台">
-              <Input placeholder="平台（可留空）" />
-            </Form.Item>
-            <Form.Item
-              name="productName"
-              label="商品名称"
-              rules={[{ required: true, message: "请输入商品名称" }]}
-            >
-              <Input placeholder="商品名称" />
-            </Form.Item>
-            <Form.Item name="spec" label="规格">
-              <Input placeholder="规格（可留空）" />
-            </Form.Item>
-            <Form.Item name="costPrice" label="成本价">
-              <InputNumber
-                min={0}
-                precision={2}
-                style={{ width: "100%" }}
-                placeholder="成本价"
-              />
-            </Form.Item>
-            <Form.Item name="supplyPrice" label="供货价">
-              <InputNumber
-                min={0}
-                precision={2}
-                style={{ width: "100%" }}
-                placeholder="供货价"
-              />
-            </Form.Item>
-          </Form>
-        )}
-      </Modal>
     </div>
   );
 }

@@ -30,6 +30,8 @@ class DailyTableServiceTest {
             .address("北京市朝阳区")
             .phone("13800000001")
             .shippingFee(new BigDecimal("12.5"))
+            .logisticsNo("SF1234567890")
+            .logisticsCompany("顺丰")
             .build();
 
     List<DailyTableRowDto> result = service.buildDailyTable(List.of(row));
@@ -44,6 +46,8 @@ class DailyTableServiceTest {
     assertEquals("北京市朝阳区", dto.getAddress());
     assertEquals("13800000001", dto.getPhone());
     assertEquals(new BigDecimal("12.5"), dto.getShippingFee());
+    assertEquals("SF1234567890", dto.getLogisticsNo());
+    assertEquals("顺丰", dto.getLogisticsCompany());
     assertNotNull(dto.getIssueDate());
   }
 }
