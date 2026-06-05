@@ -40,9 +40,24 @@ mvn -q test -Dtest=SampleExcelGeneratorTest
 - **数据库**: MySQL 8
 - **前端**: React 18, TypeScript, Vite 5, Ant Design 5
 
-## 一键部署（推荐，自带运行环境）
+## 终端用户安装（Mac / Windows 单机版）
+
+面向客户电脑部署，**支持本机选文件夹、打开导出目录**，无需 Docker 或开发环境。
+
+| 平台 | 用户操作 | 你打包容 |
+|------|----------|----------|
+| **macOS** | 解压 zip → 双击 `start.command` | `bash scripts/build-mac-release.sh` |
+| **Windows** | 安装 exe → 桌面快捷方式启动 | GitHub Actions 或 `scripts/build-windows-release.ps1` |
+
+详细说明见 [docs/mac-installer.md](docs/mac-installer.md)、[docs/windows-installer.md](docs/windows-installer.md)。
+
+---
+
+## 一键部署（Docker，适合服务器 / 演示）
 
 通过 **Docker** 打包 MySQL 8、Java 17 后端、Nginx 前端，无需在宿主机单独安装 JDK / Node / MySQL。
+
+> **注意**：Docker 版无法使用本机文件夹选择器，**Mac 终端用户请用上方单机 zip**。
 
 **前置条件**：已安装 [Docker](https://docs.docker.com/get-docker/)（Windows 用 [Docker Desktop](https://www.docker.com/products/docker-desktop/)）
 

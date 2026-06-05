@@ -1,0 +1,78 @@
+# 在 GitHub 云端自动构建 macOS 单机 zip，本地无需 Node / JDK / Maven
+name: Build macOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: "目标架构"
+        required: true
+        default: both
+        type: choice
+        options:
+          - both
+          - aarch64
+          - x64
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: aarch64
+            runner: macos-14
+            enabled: ${{ github.event_name == 'push' || github.event.inputs.arch == 'both' || github.event.inputs.arch == 'aarch64' }}
+          - arch: x64
+            runner: macos-13
+            enabled: ${{ github.event_name == 'push' || github.event.inputs.arch == 'both' || github.event.inputs.arch == 'x64' }}
+    runs-on: ${{ matrix.runner }}
+    if: matrix.enabled == true
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 安装 JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: 构建 macOS 发布包
+        run: |
+          chmod +x scripts/build-mac-release.sh
+          bash scripts/build-mac-release.sh --arch "${{ matrix.arch }}"
+
+      - name: 上传 zip（Artifact）
+        uses: actions/upload-artifact@v4
+        with:
+          name: OrderSplitMerge-mac-${{ matrix.arch }}
+          path: release/dist/*.zip
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: 发布到 GitHub Release（仅 tag 推送时）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/dist/*.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

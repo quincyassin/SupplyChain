@@ -26,3 +26,6 @@ echo "  powershell -ExecutionPolicy Bypass -File scripts\\build-windows-release.
 echo ""
 echo "或仅生成 staging / zip:"
 echo "  powershell ... -SkipInstaller"
+echo ""
+echo "macOS 单机 zip 请运行:"
+echo "  bash scripts/build-mac-release.sh"
