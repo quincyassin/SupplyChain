@@ -22,6 +22,12 @@ chmod +x scripts/build-mac-release.sh
 bash scripts/build-mac-release.sh
 ```
 
+若报 **「JRE 下载文件过小」**（网络无法访问 adoptium.net / github.com），在本机已装 JDK 17 时：
+
+```bash
+bash scripts/build-mac-release.sh --use-local-jre
+```
+
 产物：
 
 - `release/dist/OrderSplitMerge-mac-aarch64-1.0.0.zip`（Apple 芯片）
@@ -32,6 +38,15 @@ bash scripts/build-mac-release.sh
 ```bash
 bash scripts/build-mac-release.sh --arch x64
 ```
+
+**M 芯片打 Intel 包**：本机 JDK 是 arm64，不能用 `--use-local-jre`。若终端 `curl` 访问 GitHub/adoptium 超时：
+
+1. 用**浏览器**下载 [Temurin 17 JRE macOS x64 .tar.gz](https://adoptium.net/zh-CN/temurin/releases/?version=17&os=mac&arch=x64&package=jre)
+2. 执行：
+   ```bash
+   bash scripts/build-mac-release.sh --arch x64 --jre-archive ~/Downloads/OpenJDK17U-jre_x64_mac_*.tar.gz
+   ```
+3. 或使用 **GitHub Actions → Build macOS Release → x64** 云端构建
 
 仅生成目录、不打 zip：
 

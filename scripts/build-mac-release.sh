@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # macOS 单机版发布包：前端 + standalone JAR + 便携 JRE + 启动脚本
 # 用法: bash scripts/build-mac-release.sh
-# 可选: --skip-jre-download  --arch aarch64|x64  --skip-zip
+# 可选: --use-local-jre  --jre-archive <path>  --skip-jre-download  --arch aarch64|x64  --skip-zip
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -39,22 +39,43 @@ PACKAGING_DIR="$ROOT_DIR/packaging/mac"
 
 SKIP_JRE_DOWNLOAD=0
 SKIP_ZIP=0
+USE_LOCAL_JRE=0
 TARGET_ARCH=""
+JRE_ARCHIVE_PATH=""
 
 usage() {
   cat <<'EOF'
 用法: bash scripts/build-mac-release.sh [选项]
 
 选项:
+  --use-local-jre       使用本机 JDK 17 作为便携运行时（网络差时推荐）
+  --jre-archive <path>  使用已下载的 Temurin JRE .tar.gz（可重复执行）
   --skip-jre-download   使用 packaging/jre-cache 中已下载的 JRE
   --arch aarch64|x64    指定 JRE 架构（默认按本机自动检测）
   --skip-zip            仅生成 release/staging，不打 zip
   -h, --help            显示帮助
+
+网络无法下载 JRE 时，可任选其一：
+  1) bash scripts/build-mac-release.sh --use-local-jre
+  2) 浏览器下载 Temurin JRE 17 .tar.gz 后：
+     bash scripts/build-mac-release.sh --jre-archive ~/Downloads/OpenJDK17U-jre_*.tar.gz
 EOF
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --use-local-jre)
+      USE_LOCAL_JRE=1
+      shift
+      ;;
+    --jre-archive)
+      JRE_ARCHIVE_PATH="${2:-}"
+      if [[ -z "$JRE_ARCHIVE_PATH" ]]; then
+        echo "[错误] --jre-archive 需要指定文件路径"
+        exit 1
+      fi
+      shift 2
+      ;;
     --skip-jre-download)
       SKIP_JRE_DOWNLOAD=1
       shift
@@ -94,18 +115,24 @@ detect_arch() {
   esac
 }
 
-resolve_jre_url() {
+# 备用固定版本（api.adoptium.net 不可达时尝试 GitHub Releases 直链）
+JRE_FALLBACK_VERSION="17.0.15+6"
+JRE_FALLBACK_TAG="jdk-17.0.15%2B6"
+
+resolve_jre_urls() {
   local arch="$1"
   case "$arch" in
     aarch64)
       echo "https://api.adoptium.net/v3/binary/latest/17/ga/mac/aarch64/jre/hotspot/normal/eclipse?project=jdk"
+      echo "https://github.com/adoptium/temurin17-binaries/releases/download/${JRE_FALLBACK_TAG}/OpenJDK17U-jre_aarch64_mac_hotspot_17.0.15_6.tar.gz"
       ;;
     x64)
       echo "https://api.adoptium.net/v3/binary/latest/17/ga/mac/x64/jre/hotspot/normal/eclipse?project=jdk"
+      echo "https://github.com/adoptium/temurin17-binaries/releases/download/${JRE_FALLBACK_TAG}/OpenJDK17U-jre_x64_mac_hotspot_17.0.15_6.tar.gz"
       ;;
     *)
-      echo "[错误] 不支持的 JRE 架构: $arch（仅 aarch64 / x64）"
-      exit 1
+      echo "[错误] 不支持的 JRE 架构: $arch（仅 aarch64 / x64）" >&2
+      return 1
       ;;
   esac
 }
@@ -126,6 +153,124 @@ find_jre_home() {
   return 1
 }
 
+detect_java_machine() {
+  local java_bin="$1"
+  local arch
+  arch="$(file "$java_bin" 2>/dev/null | awk -F': ' '{print $2}')"
+  if [[ "$arch" == *arm64* ]]; then
+    echo "aarch64"
+  elif [[ "$arch" == *x86_64* ]]; then
+    echo "x64"
+  else
+    echo "unknown"
+  fi
+}
+
+validate_jre_archive() {
+  local archive="$1"
+  local size
+  if [[ ! -f "$archive" ]]; then
+    return 1
+  fi
+  size="$(wc -c <"$archive" | tr -d ' ')"
+  if [[ "$size" -lt 30000000 ]]; then
+    echo "[错误] JRE 文件过小（${size} 字节），可能下载不完整" >&2
+    return 1
+  fi
+  if ! tar -tzf "$archive" >/dev/null 2>&1; then
+    echo "[错误] JRE 文件不是有效的 .tar.gz：$archive" >&2
+    return 1
+  fi
+}
+
+can_reach_url() {
+  local url="$1"
+  curl -fsSIL --http1.1 --connect-timeout 8 --max-time 12 "$url" >/dev/null 2>&1
+}
+
+download_jre_archive() {
+  local dest="$1"
+  shift
+  local url attempt
+  rm -f "$dest"
+  for url in "$@"; do
+    echo "下载源: $url"
+    if ! can_reach_url "$url"; then
+      echo "[跳过] 无法连接该地址（终端访问外网受限时常见）"
+      continue
+    fi
+    for attempt in 1 2; do
+      echo "下载尝试 ${attempt}/2 ..."
+      if curl -fL --http1.1 --retry 2 --retry-delay 3 --connect-timeout 30 --max-time 1800 \
+        -C - --progress-bar "$url" -o "$dest"; then
+        if validate_jre_archive "$dest"; then
+          return 0
+        fi
+      fi
+      echo "[警告] 下载未完成或文件损坏"
+      rm -f "$dest"
+      sleep 1
+    done
+  done
+  return 1
+}
+
+print_jre_download_help() {
+  local arch="$1"
+  local host_arch
+  host_arch="$(detect_arch)"
+
+  echo ""
+  echo "[提示] 终端无法下载 JRE（curl 访问 adoptium.net / github.com 超时或卡住）。"
+  echo "       这通常是网络/防火墙限制，不是打包脚本本身的问题。"
+  echo ""
+
+  if [[ "$arch" == "aarch64" ]]; then
+    cat <<EOF
+请任选一种方式后继续：
+
+  方式 A（推荐，M 芯片 + 本机已装 JDK 17）：
+    bash scripts/build-mac-release.sh --use-local-jre
+
+  方式 B（浏览器手动下载 .tar.gz 后）：
+    bash scripts/build-mac-release.sh --jre-archive ~/Downloads/OpenJDK17U-jre_aarch64_mac_*.tar.gz
+
+  方式 C（GitHub Actions 云端构建）：
+    仓库 Actions → Build macOS Release → 架构选 aarch64
+EOF
+  else
+    cat <<EOF
+你在 ${host_arch} 电脑上打 Intel（x64）包，本机 JDK 是 arm64，不能用 --use-local-jre。
+
+请任选一种方式：
+
+  方式 A（推荐，浏览器下载 Intel JRE 后）：
+    1. 用浏览器打开（比终端 curl 更容易走代理）：
+       https://adoptium.net/zh-CN/temurin/releases/?version=17&os=mac&arch=x64&package=jre
+    2. 下载 OpenJDK17U-jre_x64_mac_hotspot_*.tar.gz（约 36MB，不要 .pkg）
+    3. 执行：
+       bash scripts/build-mac-release.sh --arch x64 --jre-archive ~/Downloads/OpenJDK17U-jre_x64_mac_*.tar.gz
+
+  方式 B（GitHub Actions 云端构建，无需本机下载 JRE）：
+    仓库 Actions → Build macOS Release → 架构选 x64
+
+  方式 C（请他人代下 JRE 压缩包，用 U 盘/网盘拷到本机后执行方式 A 第 3 步）
+EOF
+  fi
+}
+
+warn_intel_build_on_apple_silicon() {
+  local host_arch="$1"
+  local target_arch="$2"
+  if [[ "$host_arch" == "aarch64" && "$target_arch" == "x64" \
+    && "$USE_LOCAL_JRE" -eq 0 && -z "$JRE_ARCHIVE_PATH" ]]; then
+    echo ""
+    echo "[说明] 在 M 芯片 Mac 上打 Intel 包：需单独准备 x64 版 JRE（不能用 --use-local-jre）。"
+    echo "       若终端下载一直超时，请用浏览器下载 .tar.gz 后加 --jre-archive，或用 GitHub Actions。"
+    echo ""
+  fi
+}
+
 write_step() {
   echo ""
   echo "==> $1"
@@ -134,6 +279,9 @@ write_step() {
 if [[ -z "$TARGET_ARCH" ]]; then
   TARGET_ARCH="$(detect_arch)"
 fi
+
+HOST_ARCH="$(detect_arch)"
+warn_intel_build_on_apple_silicon "$HOST_ARCH" "$TARGET_ARCH"
 
 echo "=========================================="
 echo "  分单发单助手 - macOS 发布包构建"
@@ -164,36 +312,66 @@ JRE_ARCH_DIR="$JRE_CACHE_DIR/mac-$TARGET_ARCH"
 JRE_TAR="$JRE_ARCH_DIR/temurin-jre17-mac-$TARGET_ARCH.tar.gz"
 JRE_EXTRACT_DIR="$JRE_ARCH_DIR/extracted"
 JRE_READY_MARKER="$JRE_EXTRACT_DIR/.ready"
+JRE_HOME=""
 
-mkdir -p "$JRE_ARCH_DIR"
-
-if [[ "$SKIP_JRE_DOWNLOAD" -eq 0 ]]; then
-  if [[ ! -f "$JRE_TAR" ]]; then
-    echo "下载 Eclipse Temurin JRE 17（${TARGET_ARCH}，约 40MB）..."
-    JRE_URL="$(resolve_jre_url "$TARGET_ARCH")"
-    curl -fL "$JRE_URL" -o "$JRE_TAR"
-  fi
-  if [[ ! -s "$JRE_TAR" ]] || [[ "$(wc -c <"$JRE_TAR" | tr -d ' ')" -lt 30000000 ]]; then
-    rm -f "$JRE_TAR"
-    echo "[错误] JRE 下载文件过小，可能下载失败"
+if [[ "$USE_LOCAL_JRE" -eq 1 ]]; then
+  local_java_arch="$(detect_java_machine "$JAVA_HOME/bin/java")"
+  if [[ "$local_java_arch" != "$TARGET_ARCH" && "$local_java_arch" != "unknown" ]]; then
+    echo "[错误] 本机 JDK 架构为 ${local_java_arch}，与目标 ${TARGET_ARCH} 不一致"
+    echo "       Intel 包请使用 --arch x64 的 JDK，或改用 --jre-archive 指定对应架构 JRE"
     exit 1
   fi
-  if [[ ! -f "$JRE_READY_MARKER" ]]; then
-    rm -rf "$JRE_EXTRACT_DIR"
-    mkdir -p "$JRE_EXTRACT_DIR"
-    tar -xzf "$JRE_TAR" -C "$JRE_EXTRACT_DIR"
-    touch "$JRE_READY_MARKER"
+  JRE_HOME="$JAVA_HOME"
+  echo "使用本机 JDK 作为便携运行时: $JRE_HOME"
+elif [[ -n "$JRE_ARCHIVE_PATH" ]]; then
+  if [[ ! -f "$JRE_ARCHIVE_PATH" ]]; then
+    echo "[错误] 找不到 JRE 文件: $JRE_ARCHIVE_PATH"
+    exit 1
   fi
+  mkdir -p "$JRE_ARCH_DIR"
+  echo "使用本地 JRE 压缩包: $JRE_ARCHIVE_PATH"
+  cp "$JRE_ARCHIVE_PATH" "$JRE_TAR"
+  if ! validate_jre_archive "$JRE_TAR"; then
+    exit 1
+  fi
+  rm -rf "$JRE_EXTRACT_DIR"
+  mkdir -p "$JRE_EXTRACT_DIR"
+  tar -xzf "$JRE_TAR" -C "$JRE_EXTRACT_DIR"
+  touch "$JRE_READY_MARKER"
+  JRE_HOME="$(find_jre_home "$JRE_EXTRACT_DIR" || true)"
 else
-  if [[ ! -f "$JRE_READY_MARKER" ]]; then
-    echo "[错误] 未找到 JRE 缓存，请去掉 --skip-jre-download 或手动放入 packaging/jre-cache"
-    exit 1
+  mkdir -p "$JRE_ARCH_DIR"
+
+  if [[ "$SKIP_JRE_DOWNLOAD" -eq 0 ]]; then
+    if [[ ! -f "$JRE_TAR" ]] || ! validate_jre_archive "$JRE_TAR" 2>/dev/null; then
+      echo "下载 Eclipse Temurin JRE 17（${TARGET_ARCH}，约 40MB）..."
+      JRE_URLS=()
+      while IFS= read -r jre_url; do
+        [[ -n "$jre_url" ]] && JRE_URLS+=("$jre_url")
+      done <<< "$(resolve_jre_urls "$TARGET_ARCH")"
+      if ! download_jre_archive "$JRE_TAR" "${JRE_URLS[@]}"; then
+        print_jre_download_help "$TARGET_ARCH"
+        exit 1
+      fi
+    fi
+    if [[ ! -f "$JRE_READY_MARKER" ]]; then
+      rm -rf "$JRE_EXTRACT_DIR"
+      mkdir -p "$JRE_EXTRACT_DIR"
+      tar -xzf "$JRE_TAR" -C "$JRE_EXTRACT_DIR"
+      touch "$JRE_READY_MARKER"
+    fi
+  else
+    if [[ ! -f "$JRE_READY_MARKER" ]]; then
+      echo "[错误] 未找到 JRE 缓存，请去掉 --skip-jre-download 或改用 --use-local-jre"
+      exit 1
+    fi
   fi
+
+  JRE_HOME="$(find_jre_home "$JRE_EXTRACT_DIR" || true)"
 fi
 
-JRE_HOME="$(find_jre_home "$JRE_EXTRACT_DIR" || true)"
 if [[ -z "$JRE_HOME" || ! -x "$JRE_HOME/bin/java" ]]; then
-  echo "[错误] JRE 解压目录结构异常，未找到 bin/java"
+  echo "[错误] JRE 目录异常，未找到 bin/java"
   exit 1
 fi
 
