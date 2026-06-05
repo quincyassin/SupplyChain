@@ -1,4 +1,5 @@
 import {
+  memo,
   startTransition,
   useCallback,
   useDeferredValue,
@@ -12,6 +13,7 @@ import {
   Alert,
   Badge,
   Button,
+  Checkbox,
   DatePicker,
   Descriptions,
   Empty,
@@ -47,7 +49,11 @@ import {
   batchUpdateReceipt,
   ReceiptStatus,
   importOrdersByPlatform,
+  previewImportDuplicates,
   hasPendingMerchantSplit,
+  type ColumnMappingItem,
+  type ImportDuplicatePreview,
+  type ImportDuplicateRow,
   openSplitExportDirectory,
   SplitResult,
   SplitTableRow,
@@ -610,34 +616,67 @@ interface EditableMerchantCellProps {
   onUpdated: (context: OrderCellUpdatedContext) => void | Promise<void>;
 }
 
-/** 表格内可编辑商家：点击后编辑，仅更新订单归属，不写入商家配置 */
-function EditableMerchantCell({
+interface EditableMerchantDisplayProps {
+  value: string;
+  orderSystemNo?: string;
+  onStartEdit: () => void;
+}
+
+/** 商家列展示态：无 draft/saving 等编辑 hooks */
+const EditableMerchantDisplay = memo(function EditableMerchantDisplay({
+  value,
+  orderSystemNo,
+  onStartEdit,
+}: EditableMerchantDisplayProps) {
+  const displayText = value.trim() || "点击设置";
+  const isPending = value === PENDING_SPLIT_MERCHANT;
+
+  return (
+    <Typography.Text
+      className={
+        isPending || !value.trim() ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined
+      }
+      type={isPending || !value.trim() ? "secondary" : undefined}
+      style={{
+        cursor: !orderSystemNo ? "not-allowed" : "pointer",
+        userSelect: "none",
+      }}
+      ellipsis={{ tooltip: value || "点击设置商家" }}
+      onClick={() => {
+        if (orderSystemNo) {
+          onStartEdit();
+        }
+      }}
+    >
+      {displayText}
+    </Typography.Text>
+  );
+});
+
+interface EditableMerchantEditorProps extends EditableMerchantCellProps {
+  onClose: () => void;
+}
+
+/** 商家列编辑态：仅在点击后挂载 */
+function EditableMerchantEditor({
   value,
   orderSystemNo,
   orderDate,
   onUpdated,
-}: EditableMerchantCellProps) {
-  const [editing, setEditing] = useState(false);
+  onClose,
+}: EditableMerchantEditorProps) {
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<InputRef>(null);
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(value);
-    }
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
 
   const cancelEdit = () => {
     setDraft(value);
-    setEditing(false);
+    onClose();
   };
 
   const commit = async () => {
@@ -654,61 +693,66 @@ function EditableMerchantCell({
     try {
       await updateImportedOrderMerchant(orderSystemNo, trimmed, orderDate);
       await onUpdated({ patch: { merchant: trimmed } });
-      setEditing(false);
+      onClose();
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "更新商家失败");
       setDraft(value);
-      setEditing(false);
+      onClose();
     } finally {
       setSaving(false);
     }
   };
 
+  return (
+    <Input
+      ref={inputRef}
+      size="small"
+      value={draft}
+      maxLength={128}
+      placeholder="输入商家"
+      disabled={saving || !orderSystemNo}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => void commit()}
+      onPressEnter={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          cancelEdit();
+        }
+      }}
+    />
+  );
+}
+
+/** 表格内可编辑商家：点击后编辑，仅更新订单归属，不写入商家配置 */
+const EditableMerchantCell = memo(function EditableMerchantCell({
+  value,
+  orderSystemNo,
+  orderDate,
+  onUpdated,
+}: EditableMerchantCellProps) {
+  const [editing, setEditing] = useState(false);
+  const startEdit = useCallback(() => setEditing(true), []);
+
   if (editing) {
     return (
-      <Input
-        ref={inputRef}
-        size="small"
-        value={draft}
-        maxLength={128}
-        placeholder="输入商家"
-        disabled={saving || !orderSystemNo}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => void commit()}
-        onPressEnter={() => void commit()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            cancelEdit();
-          }
-        }}
+      <EditableMerchantEditor
+        value={value}
+        orderSystemNo={orderSystemNo}
+        orderDate={orderDate}
+        onUpdated={onUpdated}
+        onClose={() => setEditing(false)}
       />
     );
   }
 
-  const displayText = value.trim() || "点击设置";
-  const isPending = value === PENDING_SPLIT_MERCHANT;
-
   return (
-    <Typography.Text
-      className={
-        isPending || !value.trim() ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined
-      }
-      type={isPending || !value.trim() ? "secondary" : undefined}
-      style={{
-        cursor: !orderSystemNo ? "not-allowed" : "pointer",
-        userSelect: "none",
-      }}
-      ellipsis={{ tooltip: value || "点击设置商家" }}
-      onClick={() => {
-        if (orderSystemNo && !saving) {
-          setEditing(true);
-        }
-      }}
-    >
-      {displayText}
-    </Typography.Text>
+    <EditableMerchantDisplay
+      value={value}
+      orderSystemNo={orderSystemNo}
+      onStartEdit={startEdit}
+    />
   );
-}
+});
 
 function normalizeShippingFeeValue(value: number | undefined): number {
   if (value == null || Number.isNaN(value)) {
@@ -744,35 +788,61 @@ interface EditableShippingFeeCellProps {
   onUpdated: (context: OrderCellUpdatedContext) => void | Promise<void>;
 }
 
-/** 表格内可编辑运费 */
-function EditableShippingFeeCell({
+interface EditableShippingFeeDisplayProps {
+  normalizedValue: number;
+  orderSystemNo?: string;
+  onStartEdit: () => void;
+}
+
+const EditableShippingFeeDisplay = memo(function EditableShippingFeeDisplay({
+  normalizedValue,
+  orderSystemNo,
+  onStartEdit,
+}: EditableShippingFeeDisplayProps) {
+  const displayText = formatShippingFee(normalizedValue);
+
+  return (
+    <Typography.Text
+      style={{
+        cursor: !orderSystemNo ? "not-allowed" : "pointer",
+        userSelect: "none",
+      }}
+      ellipsis={{ tooltip: displayText }}
+      onClick={() => {
+        if (orderSystemNo) {
+          onStartEdit();
+        }
+      }}
+    >
+      {displayText}
+    </Typography.Text>
+  );
+});
+
+interface EditableShippingFeeEditorProps extends EditableShippingFeeCellProps {
+  onClose: () => void;
+}
+
+function EditableShippingFeeEditor({
   value,
   orderSystemNo,
   orderDate,
   onUpdated,
-}: EditableShippingFeeCellProps) {
+  onClose,
+}: EditableShippingFeeEditorProps) {
   const normalizedValue = normalizeShippingFeeValue(value);
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(formatShippingFeeDraft(normalizedValue));
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<InputRef>(null);
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(formatShippingFeeDraft(normalizedValue));
-    }
-  }, [normalizedValue, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
 
   const cancelEdit = () => {
     setDraft(formatShippingFeeDraft(normalizedValue));
-    setEditing(false);
+    onClose();
   };
 
   const commit = async () => {
@@ -798,55 +868,66 @@ function EditableShippingFeeCell({
         orderDate,
       );
       await onUpdated({ patch: { shippingFee: parsed } });
-      setEditing(false);
+      onClose();
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "更新运费失败");
       setDraft(formatShippingFeeDraft(normalizedValue));
-      setEditing(false);
+      onClose();
     } finally {
       setSaving(false);
     }
   };
 
+  return (
+    <Input
+      ref={inputRef}
+      size="small"
+      value={draft}
+      placeholder="输入运费"
+      disabled={saving || !orderSystemNo}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => void commit()}
+      onPressEnter={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          cancelEdit();
+        }
+      }}
+    />
+  );
+}
+
+/** 表格内可编辑运费 */
+const EditableShippingFeeCell = memo(function EditableShippingFeeCell({
+  value,
+  orderSystemNo,
+  orderDate,
+  onUpdated,
+}: EditableShippingFeeCellProps) {
+  const normalizedValue = normalizeShippingFeeValue(value);
+  const [editing, setEditing] = useState(false);
+  const startEdit = useCallback(() => setEditing(true), []);
+
   if (editing) {
     return (
-      <Input
-        ref={inputRef}
-        size="small"
-        value={draft}
-        placeholder="输入运费"
-        disabled={saving || !orderSystemNo}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => void commit()}
-        onPressEnter={() => void commit()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            cancelEdit();
-          }
-        }}
+      <EditableShippingFeeEditor
+        value={value}
+        orderSystemNo={orderSystemNo}
+        orderDate={orderDate}
+        onUpdated={onUpdated}
+        onClose={() => setEditing(false)}
       />
     );
   }
 
-  const displayText = formatShippingFee(normalizedValue);
-
   return (
-    <Typography.Text
-      style={{
-        cursor: !orderSystemNo ? "not-allowed" : "pointer",
-        userSelect: "none",
-      }}
-      ellipsis={{ tooltip: displayText }}
-      onClick={() => {
-        if (orderSystemNo && !saving) {
-          setEditing(true);
-        }
-      }}
-    >
-      {displayText}
-    </Typography.Text>
+    <EditableShippingFeeDisplay
+      normalizedValue={normalizedValue}
+      orderSystemNo={orderSystemNo}
+      onStartEdit={startEdit}
+    />
   );
-}
+});
 
 type ProductPriceFieldKey = "costPrice" | "supplyPrice";
 
@@ -896,38 +977,69 @@ interface EditableProductPriceCellProps {
   onUpdated: (context: OrderCellUpdatedContext) => void | Promise<void>;
 }
 
-/** 表格内可编辑成本价/供货价，保存后按组合键同步到其他订单 */
-function EditableProductPriceCell({
+interface EditableProductPriceDisplayProps {
+  normalizedValue: number;
+  orderSystemNo?: string;
+  onStartEdit: () => void;
+}
+
+const EditableProductPriceDisplay = memo(function EditableProductPriceDisplay({
+  normalizedValue,
+  orderSystemNo,
+  onStartEdit,
+}: EditableProductPriceDisplayProps) {
+  const displayText =
+    normalizedValue === 0 ? "点击编辑" : formatProductPrice(normalizedValue);
+  const isEmptyHint = normalizedValue === 0;
+
+  return (
+    <Typography.Text
+      className={isEmptyHint ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
+      type={isEmptyHint ? "secondary" : undefined}
+      style={{
+        cursor: !orderSystemNo ? "not-allowed" : "pointer",
+        userSelect: "none",
+      }}
+      ellipsis={{ tooltip: displayText }}
+      onClick={() => {
+        if (orderSystemNo) {
+          onStartEdit();
+        }
+      }}
+    >
+      {displayText}
+    </Typography.Text>
+  );
+});
+
+interface EditableProductPriceEditorProps extends EditableProductPriceCellProps {
+  onClose: () => void;
+}
+
+/** 表格内可编辑成本价/供货价编辑态，保存后按组合键同步到其他订单 */
+function EditableProductPriceEditor({
   fieldKey,
   value,
   orderSystemNo,
   orderDate,
   onUpdated,
-}: EditableProductPriceCellProps) {
+  onClose,
+}: EditableProductPriceEditorProps) {
   const meta = PRODUCT_PRICE_FIELD_META[fieldKey];
   const normalizedValue = normalizeShippingFeeValue(value);
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(formatShippingFeeDraft(normalizedValue));
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<InputRef>(null);
   const committingRef = useRef(false);
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(formatShippingFeeDraft(normalizedValue));
-    }
-  }, [normalizedValue, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
 
   const cancelEdit = () => {
     setDraft(formatShippingFeeDraft(normalizedValue));
-    setEditing(false);
+    onClose();
   };
 
   const commit = async () => {
@@ -958,65 +1070,73 @@ function EditableProductPriceCell({
       );
       await onUpdated({ productPrice: { fieldKey, price: parsed } });
       showProductPriceSaveMessage(fieldKey, meta.label);
-      setEditing(false);
+      onClose();
     } catch (err: unknown) {
       message.error(
         err instanceof Error ? err.message : `更新${meta.label}失败`,
       );
       setDraft(formatShippingFeeDraft(normalizedValue));
-      setEditing(false);
+      onClose();
     } finally {
       committingRef.current = false;
       setSaving(false);
     }
   };
 
+  return (
+    <Input
+      ref={inputRef}
+      size="small"
+      value={draft}
+      placeholder={meta.placeholder}
+      disabled={saving || !orderSystemNo}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => void commit()}
+      onPressEnter={(event) => {
+        event.preventDefault();
+        void commit();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          cancelEdit();
+        }
+      }}
+    />
+  );
+}
+
+const EditableProductPriceCell = memo(function EditableProductPriceCell({
+  fieldKey,
+  value,
+  orderSystemNo,
+  orderDate,
+  onUpdated,
+}: EditableProductPriceCellProps) {
+  const normalizedValue = normalizeShippingFeeValue(value);
+  const [editing, setEditing] = useState(false);
+  const startEdit = useCallback(() => setEditing(true), []);
+
   if (editing) {
     return (
-      <Input
-        ref={inputRef}
-        size="small"
-        value={draft}
-        placeholder={meta.placeholder}
-        disabled={saving || !orderSystemNo}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => void commit()}
-        onPressEnter={(event) => {
-          event.preventDefault();
-          void commit();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            cancelEdit();
-          }
-        }}
+      <EditableProductPriceEditor
+        fieldKey={fieldKey}
+        value={value}
+        orderSystemNo={orderSystemNo}
+        orderDate={orderDate}
+        onUpdated={onUpdated}
+        onClose={() => setEditing(false)}
       />
     );
   }
 
-  const displayText =
-    normalizedValue === 0 ? "点击编辑" : formatProductPrice(normalizedValue);
-  const isEmptyHint = normalizedValue === 0;
-
   return (
-    <Typography.Text
-      className={isEmptyHint ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
-      type={isEmptyHint ? "secondary" : undefined}
-      style={{
-        cursor: !orderSystemNo ? "not-allowed" : "pointer",
-        userSelect: "none",
-      }}
-      ellipsis={{ tooltip: displayText }}
-      onClick={() => {
-        if (orderSystemNo && !saving) {
-          setEditing(true);
-        }
-      }}
-    >
-      {displayText}
-    </Typography.Text>
+    <EditableProductPriceDisplay
+      normalizedValue={normalizedValue}
+      orderSystemNo={orderSystemNo}
+      onStartEdit={startEdit}
+    />
   );
-}
+});
 
 const EDITABLE_ORDER_FIELD_CONFIG: Record<
   EditableOrderFieldKey,
@@ -1068,37 +1188,70 @@ interface EditableOrderFieldCellProps {
   onUpdated: (context: OrderCellUpdatedContext) => void | Promise<void>;
 }
 
-/** 表格内可编辑订单字段：点击后编辑并保存到后端 */
-function EditableOrderFieldCell({
+interface EditableOrderFieldDisplayProps {
+  fieldKey: EditableOrderFieldKey;
+  value: string;
+  orderSystemNo?: string;
+  onStartEdit: () => void;
+}
+
+const EditableOrderFieldDisplay = memo(function EditableOrderFieldDisplay({
+  fieldKey,
+  value,
+  orderSystemNo,
+  onStartEdit,
+}: EditableOrderFieldDisplayProps) {
+  const fieldConfig = EDITABLE_ORDER_FIELD_CONFIG[fieldKey];
+  const displayText = value.trim() || "点击编辑";
+  const isEmptyHint = !value.trim();
+
+  return (
+    <Typography.Text
+      className={isEmptyHint ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
+      type={isEmptyHint ? "secondary" : undefined}
+      style={{
+        cursor: !orderSystemNo ? "not-allowed" : "pointer",
+        userSelect: "none",
+      }}
+      ellipsis={{ tooltip: value || fieldConfig.placeholder }}
+      onClick={() => {
+        if (orderSystemNo) {
+          onStartEdit();
+        }
+      }}
+    >
+      {displayText}
+    </Typography.Text>
+  );
+});
+
+interface EditableOrderFieldEditorProps extends EditableOrderFieldCellProps {
+  onClose: () => void;
+}
+
+/** 表格内可编辑订单字段编辑态：点击后挂载并保存到后端 */
+function EditableOrderFieldEditor({
   fieldKey,
   value,
   orderSystemNo,
   orderDate,
   currentRow,
   onUpdated,
-}: EditableOrderFieldCellProps) {
+  onClose,
+}: EditableOrderFieldEditorProps) {
   const fieldConfig = EDITABLE_ORDER_FIELD_CONFIG[fieldKey];
-  const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
   const [saving, setSaving] = useState(false);
   const inputRef = useRef<InputRef>(null);
 
   useEffect(() => {
-    if (!editing) {
-      setDraft(value);
-    }
-  }, [value, editing]);
-
-  useEffect(() => {
-    if (editing) {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    }
-  }, [editing]);
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
 
   const cancelEdit = () => {
     setDraft(value);
-    setEditing(false);
+    onClose();
   };
 
   const commit = async () => {
@@ -1121,7 +1274,7 @@ function EditableOrderFieldCell({
       await onUpdated({
         patch: buildEditableFieldPatch(fieldKey, trimmed, currentRow),
       });
-      setEditing(false);
+      onClose();
     } catch (err: unknown) {
       message.error(
         err instanceof Error
@@ -1129,55 +1282,66 @@ function EditableOrderFieldCell({
           : `更新${fieldConfig.errorLabel}失败`,
       );
       setDraft(value);
-      setEditing(false);
+      onClose();
     } finally {
       setSaving(false);
     }
   };
 
+  return (
+    <Input
+      ref={inputRef}
+      size="small"
+      value={draft}
+      maxLength={fieldConfig.maxLength}
+      placeholder={fieldConfig.placeholder}
+      disabled={saving || !orderSystemNo}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => void commit()}
+      onPressEnter={() => void commit()}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          cancelEdit();
+        }
+      }}
+    />
+  );
+}
+
+const EditableOrderFieldCell = memo(function EditableOrderFieldCell({
+  fieldKey,
+  value,
+  orderSystemNo,
+  orderDate,
+  currentRow,
+  onUpdated,
+}: EditableOrderFieldCellProps) {
+  const [editing, setEditing] = useState(false);
+  const startEdit = useCallback(() => setEditing(true), []);
+
   if (editing) {
     return (
-      <Input
-        ref={inputRef}
-        size="small"
-        value={draft}
-        maxLength={fieldConfig.maxLength}
-        placeholder={fieldConfig.placeholder}
-        disabled={saving || !orderSystemNo}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => void commit()}
-        onPressEnter={() => void commit()}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            cancelEdit();
-          }
-        }}
+      <EditableOrderFieldEditor
+        fieldKey={fieldKey}
+        value={value}
+        orderSystemNo={orderSystemNo}
+        orderDate={orderDate}
+        currentRow={currentRow}
+        onUpdated={onUpdated}
+        onClose={() => setEditing(false)}
       />
     );
   }
 
-  const displayText = value.trim() || "点击编辑";
-  const isEmptyHint = !value.trim();
-
   return (
-    <Typography.Text
-      className={isEmptyHint ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
-      type={isEmptyHint ? "secondary" : undefined}
-      style={{
-        cursor: !orderSystemNo ? "not-allowed" : "pointer",
-        userSelect: "none",
-      }}
-      ellipsis={{ tooltip: value || fieldConfig.placeholder }}
-      onClick={() => {
-        if (orderSystemNo && !saving) {
-          setEditing(true);
-        }
-      }}
-    >
-      {displayText}
-    </Typography.Text>
+    <EditableOrderFieldDisplay
+      fieldKey={fieldKey}
+      value={value}
+      orderSystemNo={orderSystemNo}
+      onStartEdit={startEdit}
+    />
   );
-}
+});
 
 /** 表头 + 分页占用高度（scroll.y 容器为 table-scroll-viewport） */
 
@@ -1256,6 +1420,18 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
   );
   const [afterSalesRemark, setAfterSalesRemark] = useState("");
   const [afterSalesSubmitting, setAfterSalesSubmitting] = useState(false);
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false);
+  const [duplicatePreview, setDuplicatePreview] =
+    useState<ImportDuplicatePreview | null>(null);
+  const [includeDuplicateOrderNos, setIncludeDuplicateOrderNos] =
+    useState(false);
+  const [duplicateImportSubmitting, setDuplicateImportSubmitting] =
+    useState(false);
+  const [pendingImport, setPendingImport] = useState<{
+    file: File;
+    mapping: ColumnMappingItem[];
+    matchedPlatform: string | null;
+  } | null>(null);
 
   const splitResult = useMemo(() => {
     if (orderDataset == null) {
@@ -1329,17 +1505,28 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     [orderDataset],
   );
 
-  const displayPageRows = useMemo(() => {
-    if (!splitResult?.pageRows) {
-      return [];
-    }
-    return splitResult.pageRows.map((row) => ({
-      ...row,
-      merchant: row.merchant?.trim() ? row.merchant : PENDING_SPLIT_MERCHANT,
-    }));
-  }, [splitResult]);
+  const displayPageRows = useMemo(
+    () => splitResult?.pageRows ?? [],
+    [splitResult],
+  );
 
   const deferredDisplayPageRows = useDeferredValue(displayPageRows);
+
+  // B：仅 Tab 筛选切换且 deferred 仍持有上一屏数据时延后更新；初始加载直接用最新数据
+  const isTableFilterPending =
+    hasRangeOrders &&
+    deferredDisplayPageRows.length > 0 &&
+    displayPageRows !== deferredDisplayPageRows;
+
+  const resolvedTableRows = isTableFilterPending
+    ? deferredDisplayPageRows
+    : displayPageRows;
+
+  // C：手动分页切片，Table 只渲染当前页行数
+  const pagedTableRows = useMemo(() => {
+    const start = (tablePage - 1) * tablePageSize;
+    return resolvedTableRows.slice(start, start + tablePageSize);
+  }, [resolvedTableRows, tablePage, tablePageSize]);
 
   /** 商家 Tab：当前平台下有订单的商家（含未定义） */
   const merchantGroupsForTabs = useMemo(() => {
@@ -1642,34 +1829,65 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const performImport = async (
+    uploadFile: File,
+    mapping: ColumnMappingItem[],
+    matchedPlatform: string | null,
+    includeDuplicates: boolean,
+  ) => {
+    const imported = await importOrdersByPlatform(
+      uploadFile,
+      mapping,
+      includeDuplicates,
+    );
+    const today = formatLocalDateKey();
+    const todayRange = { start: today, end: today };
+    setSidebarSelectedDate(today);
+    setQueryDateRange(todayRange);
+    queryDateRangeRef.current = todayRange;
+    await refreshDateSummaries();
+    applySplitResult(imported);
+    if (matchedPlatform) {
+      message.success(
+        `已导入 ${imported.totalRows} 条并按商家分单（平台：${matchedPlatform}）`,
+      );
+    } else {
+      message.success(`已导入 ${imported.totalRows} 条并按商家分单`);
+    }
+  };
+
   const loadHeaders = async (uploadFile: File) => {
     setHeaderLoading(true);
     setErrorAlert(null);
     try {
       const result = await readExcelHeaders(uploadFile);
-      setMatchedPlatform(result.matchedPlatform ?? null);
+      const resolvedPlatform = result.matchedPlatform ?? null;
+      setMatchedPlatform(resolvedPlatform);
       if (result.suggestedMapping.length === 0) {
         setErrorAlert("未能匹配表头，请检查系统配置中的平台模板");
         return;
       }
-      const imported = await importOrdersByPlatform(
+      const preview = await previewImportDuplicates(
         uploadFile,
         result.suggestedMapping,
       );
-      const today = formatLocalDateKey();
-      const todayRange = { start: today, end: today };
-      setSidebarSelectedDate(today);
-      setQueryDateRange(todayRange);
-      queryDateRangeRef.current = todayRange;
-      await refreshDateSummaries();
-      applySplitResult(imported);
-      if (result.matchedPlatform) {
-        message.success(
-          `已导入 ${imported.totalRows} 条并按商家分单（平台：${result.matchedPlatform}）`,
+      if (!preview.orderNoMapped || preview.duplicateRowCount === 0) {
+        await performImport(
+          uploadFile,
+          result.suggestedMapping,
+          resolvedPlatform,
+          false,
         );
-      } else {
-        message.success(`已导入 ${imported.totalRows} 条并按商家分单`);
+        return;
       }
+      setPendingImport({
+        file: uploadFile,
+        mapping: result.suggestedMapping,
+        matchedPlatform: resolvedPlatform,
+      });
+      setDuplicatePreview(preview);
+      setIncludeDuplicateOrderNos(false);
+      setDuplicateModalOpen(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "读取表头失败";
       setErrorAlert(msg);
@@ -1677,6 +1895,40 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
       setFile(null);
     } finally {
       setHeaderLoading(false);
+    }
+  };
+
+  const handleCancelDuplicateImport = () => {
+    setDuplicateModalOpen(false);
+    setDuplicatePreview(null);
+    setPendingImport(null);
+    setIncludeDuplicateOrderNos(false);
+    setFile(null);
+    setMatchedPlatform(null);
+  };
+
+  const handleConfirmDuplicateImport = async () => {
+    if (!pendingImport) {
+      return;
+    }
+    setDuplicateImportSubmitting(true);
+    setErrorAlert(null);
+    try {
+      await performImport(
+        pendingImport.file,
+        pendingImport.mapping,
+        pendingImport.matchedPlatform,
+        includeDuplicateOrderNos,
+      );
+      setDuplicateModalOpen(false);
+      setDuplicatePreview(null);
+      setPendingImport(null);
+      setIncludeDuplicateOrderNos(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "导入失败";
+      setErrorAlert(msg);
+    } finally {
+      setDuplicateImportSubmitting(false);
     }
   };
 
@@ -2097,6 +2349,52 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     }
   };
 
+  const duplicatePreviewColumns = useMemo((): ColumnsType<ImportDuplicateRow> => {
+    return [
+      {
+        title: "Excel 行号",
+        dataIndex: "sourceRowNum",
+        width: 90,
+      },
+      {
+        title: "订单编号",
+        dataIndex: "orderNo",
+        width: 140,
+        ellipsis: true,
+      },
+      {
+        title: "商品名称",
+        dataIndex: "productName",
+        width: 160,
+        ellipsis: true,
+      },
+      {
+        title: "规格",
+        dataIndex: "spec",
+        width: 120,
+        ellipsis: true,
+      },
+      {
+        title: "数量",
+        dataIndex: "quantity",
+        width: 72,
+      },
+      {
+        title: "收货人",
+        dataIndex: "receiver",
+        width: 100,
+        ellipsis: true,
+      },
+      {
+        title: "重复原因",
+        dataIndex: "duplicateReason",
+        width: 120,
+        render: (reason: ImportDuplicateRow["duplicateReason"]) =>
+          reason === "FILE" ? "文件内重复" : "历史订单重复",
+      },
+    ];
+  }, []);
+
   const buildTableColumns = useCallback(
     (options: { showPlatformColumn: boolean }): ColumnsType<SplitTableRow> => {
       const notifyOrderCellUpdated = (
@@ -2135,7 +2433,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         ellipsis: true,
         render: (merchant: string | undefined, record: SplitTableRow) => (
           <EditableMerchantCell
-            value={merchant ?? PENDING_SPLIT_MERCHANT}
+            value={resolveRowMerchantName(merchant)}
             orderSystemNo={record.systemNo}
             orderDate={resolveRowIssueDateKey(record, queryDateRange.end)}
             onUpdated={(context) => notifyOrderCellUpdated(record, context)}
@@ -2391,7 +2689,8 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                 </Button>
               )}
               <Popconfirm
-                title="确定删除该行订单？"
+                title="确定将该订单移入回收站？"
+                description="移入后可在顶部菜单「回收站」中恢复或彻底删除。"
                 onConfirm={() => handleDeleteRow(record)}
               >
                 <Button
@@ -2458,10 +2757,10 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
 
   const selectableSystemNos = useMemo(
     () =>
-      deferredDisplayPageRows
+      resolvedTableRows
         .map((row) => row.systemNo)
         .filter((systemNo): systemNo is string => Boolean(systemNo)),
-    [deferredDisplayPageRows],
+    [resolvedTableRows],
   );
 
   const handleRowSelectionChange = useCallback(
@@ -2535,7 +2834,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     (): TablePaginationConfig => ({
       current: tablePage,
       pageSize: tablePageSize,
-      total: deferredDisplayPageRows.length,
+      total: resolvedTableRows.length,
       showSizeChanger: true,
       pageSizeOptions: ["10", "20", "50"],
       showTotal: (total: number) => `共 ${total} 条`,
@@ -2546,12 +2845,10 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     [
       tablePage,
       tablePageSize,
-      deferredDisplayPageRows.length,
+      resolvedTableRows.length,
       handleTablePageChange,
     ],
   );
-
-  const isTableFilterPending = displayPageRows !== deferredDisplayPageRows;
 
   const orderTableNode = useMemo(() => {
     if (!hasRangeOrders) {
@@ -2576,7 +2873,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
           }}
           rowSelection={tableRowSelection}
           pagination={tablePagination}
-          dataSource={deferredDisplayPageRows}
+          dataSource={pagedTableRows}
           columns={orderResizableColumns}
           rowClassName={(record) => resolveAfterSalesRowClassName(record)}
         />
@@ -2592,7 +2889,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     tableRowSelection,
     tablePagination,
     isTableFilterPending,
-    deferredDisplayPageRows,
+    pagedTableRows,
     orderResizableColumns,
   ]);
 
@@ -2858,7 +3155,8 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
                       所选数据导出
                     </Button>
                     <Popconfirm
-                      title={`确定删除选中的 ${selectedSystemNos.length} 条订单？`}
+                      title={`确定将选中的 ${selectedSystemNos.length} 条订单移入回收站？`}
+                      description="移入后可在顶部菜单「回收站」中恢复或彻底删除。"
                       onConfirm={() => void handleDeleteSelected()}
                       disabled={selectedSystemNos.length === 0}
                     >
@@ -3133,6 +3431,53 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
           maxLength={512}
           showCount
         />
+      </Modal>
+
+      <Modal
+        title="发现重复订单编号"
+        open={duplicateModalOpen}
+        onCancel={handleCancelDuplicateImport}
+        onOk={() => void handleConfirmDuplicateImport()}
+        confirmLoading={duplicateImportSubmitting}
+        okText="确认导入"
+        cancelText="取消"
+        width={920}
+        destroyOnClose
+      >
+        {duplicatePreview != null && (
+          <>
+            <Typography.Paragraph style={{ marginBottom: 8 }}>
+              共检测到 {duplicatePreview.duplicateOrderNos.length} 个重复订单编号，涉及{" "}
+              {duplicatePreview.duplicateRowCount} 行数据（比对范围含历史订单与归档订单）。
+            </Typography.Paragraph>
+            <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
+              重复编号：
+              {duplicatePreview.duplicateOrderNos.join("、")}
+            </Typography.Paragraph>
+            <Table
+              size="small"
+              bordered
+              rowKey={(row) => `${row.sourceRowNum}-${row.orderNo}`}
+              columns={duplicatePreviewColumns}
+              dataSource={duplicatePreview.duplicateRows}
+              pagination={{
+                pageSize: 8,
+                showSizeChanger: false,
+                hideOnSinglePage: true,
+              }}
+              scroll={{ x: 820, y: 280 }}
+            />
+            <Checkbox
+              checked={includeDuplicateOrderNos}
+              onChange={(event) =>
+                setIncludeDuplicateOrderNos(event.target.checked)
+              }
+              style={{ marginTop: 12 }}
+            >
+              导入重复订单（不勾选则仅导入不重复的数据）
+            </Checkbox>
+          </>
+        )}
       </Modal>
     </div>
   );

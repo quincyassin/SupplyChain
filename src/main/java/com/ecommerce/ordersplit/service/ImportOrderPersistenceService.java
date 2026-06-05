@@ -42,6 +42,7 @@ public class ImportOrderPersistenceService {
     private static final int PHONE_MAX_LENGTH = 32;
 
     private final ImportOrderRepository importOrderRepository;
+    private final ImportOrderRecycleBinService importOrderRecycleBinService;
     private final DailyTableService dailyTableService;
     private final MerchantConfigService merchantConfigService;
     private final OrderSplitMergeService orderSplitMergeService;
@@ -82,7 +83,7 @@ public class ImportOrderPersistenceService {
     }
 
     /**
-     * 删除指定日期已入库的单条订单（须在 recently 窗口内）
+     * 将指定日期已入库的单条订单移入回收站
      */
     @Transactional
     public void deleteOrderForDate(String systemNo, LocalDate date) {
@@ -90,7 +91,7 @@ public class ImportOrderPersistenceService {
     }
 
     /**
-     * 批量删除指定日期已入库订单
+     * 批量将指定日期已入库订单移入回收站
      */
     @Transactional
     public int deleteOrdersForDate(List<String> systemNos, LocalDate date) {
@@ -117,11 +118,10 @@ public class ImportOrderPersistenceService {
         for (ImportOrder entity : entities) {
             LocalDateTime issueDate = entity.getIssueDate();
             if (issueDate == null || issueDate.isBefore(start) || !issueDate.isBefore(end)) {
-                throw new BusinessException("只能删除所选日期当天的订单");
+                throw new BusinessException("只能移入回收站所选日期当天的订单");
             }
         }
-        importOrderRepository.deleteAll(entities);
-        return entities.size();
+        return importOrderRecycleBinService.moveOrdersToRecycleBin(entities);
     }
 
     /**

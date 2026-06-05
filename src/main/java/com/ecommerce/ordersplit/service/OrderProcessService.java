@@ -8,6 +8,7 @@ import com.ecommerce.ordersplit.dto.ParsedImportExcel;
 import com.ecommerce.ordersplit.dto.BatchReceiptRequest;
 import com.ecommerce.ordersplit.dto.BatchReceiptResponse;
 import com.ecommerce.ordersplit.dto.ExportSelectedRequest;
+import com.ecommerce.ordersplit.dto.ImportDuplicatePreviewDto;
 import com.ecommerce.ordersplit.dto.ImportedDateSummaryDto;
 import com.ecommerce.ordersplit.dto.OrderFieldDto;
 import com.ecommerce.ordersplit.dto.ReadHeadersResponse;
@@ -78,6 +79,7 @@ public class OrderProcessService {
     private final ExportDownloadCacheService exportDownloadCacheService;
     private final ReconcileExportService reconcileExportService;
     private final AfterSalesExportService afterSalesExportService;
+    private final ImportOrderDuplicateCheckService importOrderDuplicateCheckService;
 
     public List<OrderFieldDto> listOrderFields() {
         return columnMappingService.listFields();
@@ -337,14 +339,35 @@ public class OrderProcessService {
     }
 
     /**
+     * 预览导入文件中的重复订单编号（文件内 + 历史/归档库内）
+     */
+    @Transactional(readOnly = true)
+    public ImportDuplicatePreviewDto previewImportDuplicates(MultipartFile file, String mappingJson) {
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException("请上传 Excel 文件");
+        }
+        ParsedImportExcel parsed =
+                excelParserService.parseImportOnce(
+                        file, platformMappingTemplateService::matchByHeaders, false);
+        ColumnMappingConfig mapping = columnMappingService.parseMappingJson(mappingJson, false);
+        return importOrderDuplicateCheckService.buildPreview(parsed.rows(), mapping);
+    }
+
+    /**
      * 上传导入：匹配平台并按商家关键字分单入库（不导出 Excel）
      */
     @Transactional
     public SplitResultResponse importByPlatform(MultipartFile file, String mappingJson) {
+        return importByPlatform(file, mappingJson, true);
+    }
+
+    @Transactional
+    public SplitResultResponse importByPlatform(
+            MultipartFile file, String mappingJson, boolean includeDuplicateOrderNos) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请上传 Excel 文件");
         }
-        return splitByMerchant(file, mappingJson);
+        return splitByMerchant(file, mappingJson, includeDuplicateOrderNos);
     }
 
     public AssignMerchantResult assignPendingMerchantsForRange(
@@ -604,6 +627,12 @@ public class OrderProcessService {
      */
     @Transactional
     public SplitResultResponse splitByMerchant(MultipartFile file, String mappingJson) {
+        return splitByMerchant(file, mappingJson, true);
+    }
+
+    @Transactional
+    public SplitResultResponse splitByMerchant(
+            MultipartFile file, String mappingJson, boolean includeDuplicateOrderNos) {
         if (file == null || file.isEmpty()) {
             return assignMerchantsForDate(LocalDate.now(ZoneId.of("Asia/Shanghai"))).getOrders();
         }
@@ -611,7 +640,7 @@ public class OrderProcessService {
         task.setStatus(TaskStatus.PROCESSING);
         processTaskRepository.save(task);
 
-        SplitExecution execution = executeSplit(file, mappingJson, task);
+        SplitExecution execution = executeSplit(file, mappingJson, task, includeDuplicateOrderNos);
         completeTask(task, execution);
 
         return importOrderQueryService.listOrdersByDate(
@@ -854,11 +883,19 @@ public class OrderProcessService {
     }
 
     private SplitExecution executeSplit(
-            MultipartFile file, String mappingJson, ProcessTask task) {
+            MultipartFile file,
+            String mappingJson,
+            ProcessTask task,
+            boolean includeDuplicateOrderNos) {
         ParsedImportExcel parsed =
                 excelParserService.parseImportOnce(
                         file, platformMappingTemplateService::matchByHeaders, false);
-        List<OrderRow> inputRows = parsed.rows();
+        List<OrderRow> inputRows =
+                importOrderDuplicateCheckService.filterForImport(
+                        parsed.rows(), includeDuplicateOrderNos);
+        if (inputRows.isEmpty()) {
+            throw new BusinessException("没有可导入的订单行（全部为重复订单编号）");
+        }
         int pendingMerchantRowCount = 0;
         for (OrderRow row : inputRows) {
             String merchant = merchantConfigService.resolveByProductName(row.getProductName());

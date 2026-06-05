@@ -4,6 +4,7 @@ import com.ecommerce.ordersplit.dto.AfterSalesExportRequest;
 import com.ecommerce.ordersplit.dto.BatchReceiptRequest;
 import com.ecommerce.ordersplit.dto.BatchReceiptResponse;
 import com.ecommerce.ordersplit.dto.ExportSelectedRequest;
+import com.ecommerce.ordersplit.dto.ImportDuplicatePreviewDto;
 import com.ecommerce.ordersplit.dto.ImportedDateSummaryDto;
 import com.ecommerce.ordersplit.dto.OrderFieldDto;
 import com.ecommerce.ordersplit.dto.ReadHeadersResponse;
@@ -106,7 +107,7 @@ public class OrderController {
     }
 
     /**
-     * 删除指定日期已入库的单条订单
+     * 将指定日期已入库的单条订单移入回收站
      */
     @DeleteMapping("/imported/{systemNo}")
     public ResponseEntity<SplitResultResponse> deleteImported(
@@ -198,7 +199,7 @@ public class OrderController {
     }
 
     /**
-     * 批量删除指定日期已入库订单
+     * 批量将指定日期已入库订单移入回收站
      */
     @PostMapping("/imported/delete-selected")
     public ResponseEntity<SplitResultResponse> deleteImportedSelected(
@@ -222,13 +223,26 @@ public class OrderController {
     }
 
     /**
+     * 预览导入文件中的重复订单编号
+     */
+    @PostMapping("/import/preview-duplicates")
+    public ResponseEntity<ImportDuplicatePreviewDto> previewImportDuplicates(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "mapping", required = false) String mapping) {
+        return ResponseEntity.ok(orderProcessService.previewImportDuplicates(file, mapping));
+    }
+
+    /**
      * 上传导入：匹配平台并按商家关键字分单入库（不导出 Excel）
      */
     @PostMapping("/import")
     public ResponseEntity<SplitResultResponse> importOrders(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "mapping", required = false) String mapping) {
-        return ResponseEntity.ok(orderProcessService.importByPlatform(file, mapping));
+            @RequestParam(value = "mapping", required = false) String mapping,
+            @RequestParam(value = "includeDuplicateOrderNos", defaultValue = "true")
+                    boolean includeDuplicateOrderNos) {
+        return ResponseEntity.ok(
+                orderProcessService.importByPlatform(file, mapping, includeDuplicateOrderNos));
     }
 
     /**

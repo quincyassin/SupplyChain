@@ -97,6 +97,14 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
             LocalDateTime startInclusive,
             LocalDateTime endExclusive);
 
+    @Query("""
+            SELECT DISTINCT o.orderNo FROM ImportOrder o
+            WHERE o.orderNo IN :orderNos
+              AND o.orderNo IS NOT NULL
+              AND o.orderNo <> ''
+            """)
+    List<String> findExistingOrderNos(@Param("orderNos") Collection<String> orderNos);
+
     /**
      * 按分单日期区间 + 关键字模糊查询（商家、平台、系统编号、物流单号、订单编号）
      */

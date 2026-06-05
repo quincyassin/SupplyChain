@@ -4,12 +4,14 @@ import {
   AccountBookOutlined,
   BookOutlined,
   CustomerServiceOutlined,
+  DeleteOutlined,
   DollarOutlined,
   HomeOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
 import OrderPage from "./pages/OrderPage";
 import AfterSalesPage from "./pages/AfterSalesPage";
+import RecycleBinPage from "./pages/RecycleBinPage";
 import ReconcilePage from "./pages/ReconcilePage";
 import ProductPricePage from "./pages/ProductPricePage";
 import ConfigPage from "./pages/ConfigPage";
@@ -24,6 +26,7 @@ type AppMenuKey =
   | "orders"
   | "reconcile"
   | "after-sales"
+  | "recycle-bin"
   | "product-prices"
   | "config"
   | "manual";
@@ -33,6 +36,9 @@ type BusinessMenuKey = Exclude<AppMenuKey, "manual">;
 function resolveManualModuleKey(businessMenu: BusinessMenuKey): ManualModuleKey {
   if (businessMenu === "config") {
     return "header-mapping";
+  }
+  if (businessMenu === "recycle-bin") {
+    return "orders";
   }
   return businessMenu;
 }
@@ -101,6 +107,11 @@ export default function App() {
               label: "售后",
             },
             {
+              key: "recycle-bin",
+              icon: <DeleteOutlined />,
+              label: "回收站",
+            },
+            {
               key: "product-prices",
               icon: <DollarOutlined />,
               label: "商品价格维护",
@@ -142,6 +153,7 @@ export default function App() {
         {activeMenu === "orders" && <OrderPage />}
         {activeMenu === "reconcile" && <ReconcilePage />}
         {activeMenu === "after-sales" && <AfterSalesPage />}
+        {activeMenu === "recycle-bin" && <RecycleBinPage />}
         {activeMenu === "product-prices" && <ProductPricePage />}
         {activeMenu === "config" && (
           <ConfigPage

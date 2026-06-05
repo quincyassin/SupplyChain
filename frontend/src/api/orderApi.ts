@@ -132,6 +132,8 @@ export interface SplitTableRow {
   afterSalesAt?: string;
   afterSalesStatus?: AfterSalesStatus;
   afterSalesStatusLabel?: string;
+  /** 移入回收站时间（仅回收站列表） */
+  deletedAt?: string;
 }
 
 export interface MerchantSplitGroup {
@@ -554,6 +556,58 @@ export async function deleteSelectedImportedOrders(
   }
 }
 
+export interface RecycleBinOperationResult {
+  affectedCount: number;
+  message: string;
+}
+
+export async function fetchRecycleBinOrders(
+  startDate: string,
+  endDate: string,
+  keyword?: string,
+): Promise<SplitResult> {
+  try {
+    const { data } = await client.get<SplitResult>("/recycle-bin", {
+      params: {
+        startDate,
+        endDate,
+        keyword: keyword?.trim() || undefined,
+      },
+    });
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function restoreSelectedRecycleBinOrders(
+  systemNos: string[],
+): Promise<RecycleBinOperationResult> {
+  try {
+    const { data } = await client.post<RecycleBinOperationResult>(
+      "/recycle-bin/restore-selected",
+      { systemNos },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
+export async function purgeSelectedRecycleBinOrders(
+  systemNos: string[],
+): Promise<RecycleBinOperationResult> {
+  try {
+    const { data } = await client.post<RecycleBinOperationResult>(
+      "/recycle-bin/purge-selected",
+      { systemNos },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
 export async function batchUpdateReceipt(
   content: string,
   startDate: string,
@@ -817,13 +871,57 @@ export async function readExcelHeaders(file: File): Promise<ReadHeadersResult> {
   }
 }
 
+export type ImportDuplicateReason = "FILE" | "DATABASE";
+
+export interface ImportDuplicateRow {
+  sourceRowNum: number;
+  orderNo: string;
+  productName: string;
+  spec: string;
+  quantity: number;
+  receiver: string;
+  duplicateReason: ImportDuplicateReason;
+}
+
+export interface ImportDuplicatePreview {
+  orderNoMapped: boolean;
+  totalRows: number;
+  duplicateRowCount: number;
+  duplicateOrderNos: string[];
+  duplicateRows: ImportDuplicateRow[];
+}
+
+export async function previewImportDuplicates(
+  file: File,
+  mapping: ColumnMappingItem[] | null,
+): Promise<ImportDuplicatePreview> {
+  const formData = new FormData();
+  formData.append("file", file);
+  appendMapping(formData, mapping);
+  try {
+    const { data } = await client.post<ImportDuplicatePreview>(
+      "/import/preview-duplicates",
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
+    return data;
+  } catch (error) {
+    throw new Error(await extractApiErrorMessage(error));
+  }
+}
+
 export async function importOrdersByPlatform(
   file: File,
   mapping: ColumnMappingItem[] | null,
+  includeDuplicateOrderNos = true,
 ): Promise<SplitResult> {
   const formData = new FormData();
   formData.append("file", file);
   appendMapping(formData, mapping);
+  formData.append(
+    "includeDuplicateOrderNos",
+    includeDuplicateOrderNos ? "true" : "false",
+  );
   try {
     const { data } = await client.post<SplitResult>("/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },

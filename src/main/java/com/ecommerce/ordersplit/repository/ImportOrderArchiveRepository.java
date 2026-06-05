@@ -3,6 +3,7 @@ package com.ecommerce.ordersplit.repository;
 import com.ecommerce.ordersplit.entity.ImportOrderArchive;
 import com.ecommerce.ordersplit.model.AfterSalesStatus;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -58,4 +59,12 @@ public interface ImportOrderArchiveRepository extends JpaRepository<ImportOrderA
     List<String> findConflictSystemNosInRange(
             @Param("startInclusive") LocalDateTime startInclusive,
             @Param("endExclusive") LocalDateTime endExclusive);
+
+    @Query("""
+            SELECT DISTINCT o.orderNo FROM ImportOrderArchive o
+            WHERE o.orderNo IN :orderNos
+              AND o.orderNo IS NOT NULL
+              AND o.orderNo <> ''
+            """)
+    List<String> findExistingOrderNos(@Param("orderNos") Collection<String> orderNos);
 }

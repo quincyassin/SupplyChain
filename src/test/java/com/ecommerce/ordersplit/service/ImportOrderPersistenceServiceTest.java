@@ -58,6 +58,8 @@ class ImportOrderPersistenceServiceTest {
 
   @Mock private ProductPriceService productPriceService;
 
+  @Mock private ImportOrderRecycleBinService importOrderRecycleBinService;
+
   private ImportOrderPersistenceService persistenceService;
 
   @BeforeEach
@@ -65,6 +67,7 @@ class ImportOrderPersistenceServiceTest {
     persistenceService =
         new ImportOrderPersistenceService(
             importOrderRepository,
+            importOrderRecycleBinService,
             new DailyTableService(),
             merchantConfigService,
             orderSplitMergeService,
@@ -261,22 +264,24 @@ class ImportOrderPersistenceServiceTest {
   }
 
   @Test
-  void deleteTodayOrder_shouldRemoveEntity() {
+  void deleteTodayOrder_shouldMoveToRecycleBin() {
     ImportOrder entity = new ImportOrder();
     entity.setSystemNo(SYSTEM_NO_1);
     entity.setIssueDate(LocalDateTime.now(ZoneId.of("Asia/Shanghai")));
     when(importOrderRepository.findBySystemNoInOrderByMerchantAscSystemNoAsc(
             List.of(SYSTEM_NO_1)))
         .thenReturn(List.of(entity));
+    when(importOrderRecycleBinService.moveOrdersToRecycleBin(List.of(entity))).thenReturn(1);
 
     persistenceService.deleteOrderForDate(
         SYSTEM_NO_1, LocalDate.now(ZoneId.of("Asia/Shanghai")));
 
-    verify(importOrderRepository).deleteAll(List.of(entity));
+    verify(importOrderRecycleBinService).moveOrdersToRecycleBin(List.of(entity));
+    verify(importOrderRepository, never()).deleteAll(anyList());
   }
 
   @Test
-  void deleteTodayOrders_shouldRemoveMultiple() {
+  void deleteTodayOrders_shouldMoveMultipleToRecycleBin() {
     ImportOrder first = new ImportOrder();
     first.setSystemNo(SYSTEM_NO_1);
     first.setIssueDate(LocalDateTime.now(ZoneId.of("Asia/Shanghai")));
@@ -286,6 +291,8 @@ class ImportOrderPersistenceServiceTest {
     when(importOrderRepository.findBySystemNoInOrderByMerchantAscSystemNoAsc(
             List.of(SYSTEM_NO_1, SYSTEM_NO_2)))
         .thenReturn(List.of(first, second));
+    when(importOrderRecycleBinService.moveOrdersToRecycleBin(List.of(first, second)))
+        .thenReturn(2);
 
     int deleted =
         persistenceService.deleteOrdersForDate(
@@ -293,7 +300,9 @@ class ImportOrderPersistenceServiceTest {
             LocalDate.now(ZoneId.of("Asia/Shanghai")));
 
     assertEquals(2, deleted);
-    verify(importOrderRepository).deleteAll(ArgumentMatchers.eq(List.of(first, second)));
+    verify(importOrderRecycleBinService)
+        .moveOrdersToRecycleBin(ArgumentMatchers.eq(List.of(first, second)));
+    verify(importOrderRepository, never()).deleteAll(anyList());
   }
 
   @Test

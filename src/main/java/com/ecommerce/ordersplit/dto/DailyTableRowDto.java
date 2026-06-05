@@ -84,4 +84,7 @@ public class DailyTableRowDto {
 
     /** 售后状态展示文案 */
     private String afterSalesStatusLabel;
+
+    /** 移入回收站时间（仅回收站列表展示） */
+    private String deletedAt;
 }
