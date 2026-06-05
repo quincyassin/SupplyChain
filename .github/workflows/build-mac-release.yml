@@ -24,12 +24,45 @@ permissions:
   contents: write
 
 jobs:
-  build-aarch64:
-    if: >-
-      github.event_name == 'push' ||
-      github.event.inputs.arch == 'both' ||
-      github.event.inputs.arch == 'aarch64'
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: 生成构建矩阵
+        id: set-matrix
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "push" ]; then
+            arch_input="both"
+          else
+            arch_input="${{ github.event.inputs.arch }}"
+          fi
+          case "$arch_input" in
+            both)
+              matrix='{"include":[{"arch":"aarch64"},{"arch":"x64"}]}'
+              ;;
+            aarch64)
+              matrix='{"include":[{"arch":"aarch64"}]}'
+              ;;
+            x64)
+              matrix='{"include":[{"arch":"x64"}]}'
+              ;;
+            *)
+              echo "[错误] 未知架构: $arch_input"
+              exit 1
+              ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "将构建: $arch_input"
+
+  build:
+    needs: prepare
     runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -48,61 +81,24 @@ jobs:
           java-version: "17"
           cache: maven
 
-      - name: 构建 macOS 发布包（aarch64）
+      - name: 构建 macOS 发布包（${{ matrix.arch }}）
         run: |
           chmod +x scripts/build-mac-release.sh
-          bash scripts/build-mac-release.sh --arch aarch64
+          bash scripts/build-mac-release.sh --arch "${{ matrix.arch }}"
 
       - name: 上传 zip（Artifact）
         uses: actions/upload-artifact@v4
         with:
-          name: OrderSplitMerge-mac-aarch64
-          path: release/dist/*.zip
-          retention-days: 90
-          if-no-files-found: error
-
-  build-x64:
-    if: >-
-      github.event_name == 'push' ||
-      github.event.inputs.arch == 'both' ||
-      github.event.inputs.arch == 'x64'
-    runs-on: macos-13
-    steps:
-      - name: 检出代码
-        uses: actions/checkout@v4
-
-      - name: 安装 Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: 安装 JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
-
-      - name: 构建 macOS 发布包（x64）
-        run: |
-          chmod +x scripts/build-mac-release.sh
-          bash scripts/build-mac-release.sh --arch x64
-
-      - name: 上传 zip（Artifact）
-        uses: actions/upload-artifact@v4
-        with:
-          name: OrderSplitMerge-mac-x64
+          name: OrderSplitMerge-mac-${{ matrix.arch }}
           path: release/dist/*.zip
           retention-days: 90
           if-no-files-found: error
 
   release:
-    needs: [build-aarch64, build-x64]
+    needs: [prepare, build]
     if: >-
       startsWith(github.ref, 'refs/tags/v') &&
-      (needs.build-aarch64.result == 'success' || needs.build-x64.result == 'success')
+      needs.build.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - name: 下载构建产物
