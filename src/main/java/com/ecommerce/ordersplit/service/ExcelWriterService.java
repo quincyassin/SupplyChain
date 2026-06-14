@@ -117,9 +117,9 @@ public class ExcelWriterService {
     private static final String[] MERCHANT_RECONCILE_HEADERS = {
             "回单状态",
             "系统编号",
+            "订单编号",
             "物流公司",
             "物流单号",
-            "订单编号",
             "商品名称",
             "规格",
             "数量",
@@ -134,8 +134,27 @@ public class ExcelWriterService {
             "分单日期"
     };
 
-    private static final String RECONCILE_TOTAL_HEADER = "总价";
-    private static final String PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER = "供货价";
+    /** 平台对账：不含平台/商家/成本价，含供货价、总价 */
+    private static final String[] PLATFORM_RECONCILE_HEADERS = {
+            "回单状态",
+            "系统编号",
+            "订单编号",
+            "物流公司",
+            "物流单号",
+            "商品名称",
+            "规格",
+            "数量",
+            "收货人",
+            "收货人电话",
+            "收货人地址",
+            "运费",
+            "供货价",
+            "总价",
+            "售后原因",
+            "备注",
+            "分单日期"
+    };
+
     private static final String AFTER_SALES_REMARK_HEADER = "售后原因";
 
     /**
@@ -213,34 +232,16 @@ public class ExcelWriterService {
     }
 
     /**
-     * 平台对账导出（按平台模板列 + 末尾追加供货价、总价）
+     * 平台对账导出（系统固定表头，含供货价、总价）
      */
-    public byte[] writePlatformReconcileTable(
-            String platformKey,
-            String sheetTitle,
-            List<DailyTableRowDto> rows,
-            ColumnMappingConfig mapping,
-            List<ExcelHeaderDto> templateHeaders)
+    public byte[] writePlatformReconcileTable(String sheetTitle, List<DailyTableRowDto> rows)
             throws IOException {
-        ReceiptWritePlan writePlan = resolveReceiptWritePlan(platformKey, mapping, templateHeaders);
         try (SXSSFWorkbook workbook = createStreamingWorkbook();
                 ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            writePlatformReconcileSheet(
-                    workbook.createSheet(sanitizeSheetName(sheetTitle)),
-                    rows,
-                    writePlan);
+            writePlatformReconcileSheet(workbook.createSheet(sanitizeSheetName(sheetTitle)), rows);
             workbook.write(outputStream);
             return outputStream.toByteArray();
         }
-    }
-
-    public byte[] writePlatformReconcileTable(
-            String sheetTitle,
-            List<DailyTableRowDto> rows,
-            ColumnMappingConfig mapping,
-            List<ExcelHeaderDto> templateHeaders)
-            throws IOException {
-        return writePlatformReconcileTable("default", sheetTitle, rows, mapping, templateHeaders);
     }
 
     public byte[] writeMerchantReceiptTable(
@@ -419,9 +420,9 @@ public class ExcelWriterService {
         int col = 0;
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getReceiptStatusLabel()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSystemNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getOrderNo()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsCompany()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsNo()));
-        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getOrderNo()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getProductName()));
         dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSpec()));
         dataRow.createCell(col++)
@@ -443,51 +444,45 @@ public class ExcelWriterService {
         dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
     }
 
-    private void writePlatformReconcileSheet(
-            Sheet sheet, List<DailyTableRowDto> rows, ReceiptWritePlan writePlan) {
-        boolean appendAfterSalesRemark =
-                shouldAppendAfterSalesRemarkColumn(rows, writePlan.fieldByColumnIndex());
-        int baseMaxColumnIndex = resolveMaxColumnIndex(writePlan.sortedHeaders());
-        int afterSalesRemarkColumnIndex = appendAfterSalesRemark ? baseMaxColumnIndex + 1 : -1;
-        int supplyPriceColumnIndex =
-                appendAfterSalesRemark ? afterSalesRemarkColumnIndex + 1 : baseMaxColumnIndex + 1;
-        int totalColumnIndex = supplyPriceColumnIndex + 1;
-
+    private void writePlatformReconcileSheet(Sheet sheet, List<DailyTableRowDto> rows) {
         Row headerRow = sheet.createRow(0);
-        for (ExcelHeaderDto header : writePlan.sortedHeaders()) {
-            headerRow.createCell(header.getColumnIndex()).setCellValue(nullToEmpty(header.getHeaderName()));
+        for (int i = 0; i < PLATFORM_RECONCILE_HEADERS.length; i++) {
+            headerRow.createCell(i).setCellValue(PLATFORM_RECONCILE_HEADERS[i]);
         }
-        if (appendAfterSalesRemark) {
-            headerRow.createCell(afterSalesRemarkColumnIndex).setCellValue(AFTER_SALES_REMARK_HEADER);
-        }
-        headerRow.createCell(supplyPriceColumnIndex)
-                .setCellValue(PLATFORM_RECONCILE_SUPPLY_PRICE_HEADER);
-        headerRow.createCell(totalColumnIndex).setCellValue(RECONCILE_TOTAL_HEADER);
-
         int rowIndex = 1;
         for (DailyTableRowDto row : rows) {
-            Row dataRow = sheet.createRow(rowIndex++);
-            for (ExcelHeaderDto header : writePlan.sortedHeaders()) {
-                OrderFieldKey fieldKey = writePlan.fieldByColumnIndex().get(header.getColumnIndex());
-                if (fieldKey == null) {
-                    continue;
-                }
-                Cell cell = dataRow.createCell(header.getColumnIndex());
-                setCellValueFromDailyRow(cell, row, fieldKey);
-            }
-            if (appendAfterSalesRemark) {
-                dataRow.createCell(afterSalesRemarkColumnIndex)
-                        .setCellValue(nullToEmpty(row.getAfterSalesRemark()));
-            }
-            dataRow.createCell(supplyPriceColumnIndex).setCellValue(formatPriceCell(row.getSupplyPrice()));
-            dataRow.createCell(totalColumnIndex)
-                    .setCellValue(
-                            formatPriceCell(
-                                    calculateReconcileTotal(
-                                            row.getSupplyPrice(),
-                                            row.getQuantity(),
-                                            row.getShippingFee())));
+            writePlatformReconcileDataRow(sheet.createRow(rowIndex++), row);
         }
+    }
+
+    private void writePlatformReconcileDataRow(Row dataRow, DailyTableRowDto row) {
+        int col = 0;
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getReceiptStatusLabel()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSystemNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getOrderNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsCompany()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getLogisticsNo()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getProductName()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getSpec()));
+        dataRow.createCell(col++)
+                .setCellValue(row.getQuantity() == null ? 0 : row.getQuantity());
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getReceiver()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getPhone()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAddress()));
+        dataRow.createCell(col++)
+                .setCellValue(
+                        row.getShippingFee() == null ? 0 : row.getShippingFee().doubleValue());
+        dataRow.createCell(col++).setCellValue(formatPriceCell(row.getSupplyPrice()));
+        dataRow.createCell(col++)
+                .setCellValue(
+                        formatPriceCell(
+                                calculateReconcileTotal(
+                                        row.getSupplyPrice(),
+                                        row.getQuantity(),
+                                        row.getShippingFee())));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getAfterSalesRemark()));
+        dataRow.createCell(col++).setCellValue(nullToEmpty(row.getRemark()));
+        dataRow.createCell(col).setCellValue(formatIssueDateOnly(row.getIssueDate()));
     }
 
     private int resolveMaxColumnIndex(List<ExcelHeaderDto> headers) {

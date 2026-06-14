@@ -256,11 +256,18 @@ class ExcelWriterServiceTest {
 
     try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
       var headerRow = workbook.getSheetAt(0).getRow(0);
+      assertEquals("订单编号", headerRow.getCell(2).getStringCellValue());
+      assertEquals("物流公司", headerRow.getCell(3).getStringCellValue());
+      assertEquals("物流单号", headerRow.getCell(4).getStringCellValue());
       assertEquals("成本价", headerRow.getCell(12).getStringCellValue());
       assertEquals("总价", headerRow.getCell(13).getStringCellValue());
       assertEquals("售后原因", headerRow.getCell(14).getStringCellValue());
+      assertEquals("备注", headerRow.getCell(15).getStringCellValue());
       assertEquals(17, headerRow.getPhysicalNumberOfCells());
       var dataRow = workbook.getSheetAt(0).getRow(1);
+      assertEquals("O1", dataRow.getCell(2).getStringCellValue());
+      assertEquals("顺丰", dataRow.getCell(3).getStringCellValue());
+      assertEquals("SF123456", dataRow.getCell(4).getStringCellValue());
       assertEquals(12.5, dataRow.getCell(12).getNumericCellValue(), 0.001);
       assertEquals(33.0, dataRow.getCell(13).getNumericCellValue(), 0.001);
       assertEquals("2026-05-28", dataRow.getCell(16).getStringCellValue());
@@ -268,43 +275,46 @@ class ExcelWriterServiceTest {
   }
 
   @Test
-  void writePlatformReconcileTable_shouldAppendSupplyPriceAndTotalColumns() throws Exception {
-    ColumnMappingConfig mapping = new ColumnMappingConfig();
-    ColumnMappingItem orderNoItem = new ColumnMappingItem();
-    orderNoItem.setFieldKey(OrderFieldKey.ORDER_NO);
-    orderNoItem.setSourceIndex(0);
-    orderNoItem.setEnabled(true);
-    orderNoItem.setSortOrder(0);
-    ColumnMappingItem quantityItem = new ColumnMappingItem();
-    quantityItem.setFieldKey(OrderFieldKey.QUANTITY);
-    quantityItem.setSourceIndex(1);
-    quantityItem.setEnabled(true);
-    quantityItem.setSortOrder(1);
-    mapping.getItems().add(orderNoItem);
-    mapping.getItems().add(quantityItem);
-
-    List<ExcelHeaderDto> templateHeaders =
-        List.of(new ExcelHeaderDto(0, "订单编号"), new ExcelHeaderDto(1, "数量"));
-
+  void writePlatformReconcileTable_shouldUseSystemHeadersWithSupplyPriceAndTotal()
+      throws Exception {
     List<DailyTableRowDto> rows =
         List.of(
             DailyTableRowDto.builder()
+                .receiptStatusLabel("已回单")
+                .systemNo("9876543210")
                 .orderNo("O1")
+                .logisticsCompany("顺丰")
+                .logisticsNo("SF123456")
+                .productName("商品")
                 .quantity(3)
                 .shippingFee(new BigDecimal("5"))
                 .supplyPrice(new BigDecimal("10"))
+                .afterSalesRemark("质量问题")
+                .remark("普通备注")
+                .issueDate("2026-05-28 12:00:00")
                 .build());
 
-    byte[] bytes =
-        service.writePlatformReconcileTable("平台A对账", rows, mapping, templateHeaders);
+    byte[] bytes = service.writePlatformReconcileTable("平台A对账", rows);
 
     try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
       var headerRow = workbook.getSheetAt(0).getRow(0);
-      assertEquals("供货价", headerRow.getCell(2).getStringCellValue());
-      assertEquals("总价", headerRow.getCell(3).getStringCellValue());
+      assertEquals("订单编号", headerRow.getCell(2).getStringCellValue());
+      assertEquals("物流公司", headerRow.getCell(3).getStringCellValue());
+      assertEquals("物流单号", headerRow.getCell(4).getStringCellValue());
+      assertEquals("供货价", headerRow.getCell(12).getStringCellValue());
+      assertEquals("总价", headerRow.getCell(13).getStringCellValue());
+      assertEquals("售后原因", headerRow.getCell(14).getStringCellValue());
+      assertEquals("备注", headerRow.getCell(15).getStringCellValue());
+      assertEquals(17, headerRow.getPhysicalNumberOfCells());
       var dataRow = workbook.getSheetAt(0).getRow(1);
-      assertEquals(10.0, dataRow.getCell(2).getNumericCellValue(), 0.001);
-      assertEquals(35.0, dataRow.getCell(3).getNumericCellValue(), 0.001);
+      assertEquals("O1", dataRow.getCell(2).getStringCellValue());
+      assertEquals("顺丰", dataRow.getCell(3).getStringCellValue());
+      assertEquals("SF123456", dataRow.getCell(4).getStringCellValue());
+      assertEquals(10.0, dataRow.getCell(12).getNumericCellValue(), 0.001);
+      assertEquals(35.0, dataRow.getCell(13).getNumericCellValue(), 0.001);
+      assertEquals("质量问题", dataRow.getCell(14).getStringCellValue());
+      assertEquals("普通备注", dataRow.getCell(15).getStringCellValue());
+      assertEquals("2026-05-28", dataRow.getCell(16).getStringCellValue());
     }
   }
 
@@ -377,43 +387,6 @@ class ExcelWriterServiceTest {
       assertEquals("售后原因", headerRow.getCell(1).getStringCellValue());
       var dataRow = workbook.getSheetAt(0).getRow(1);
       assertEquals("退货退款", dataRow.getCell(1).getStringCellValue());
-    }
-  }
-
-  @Test
-  void writePlatformReconcileTable_shouldAppendAfterSalesRemarkBeforePriceColumns() throws Exception {
-    ColumnMappingConfig mapping = new ColumnMappingConfig();
-    ColumnMappingItem orderNoItem = new ColumnMappingItem();
-    orderNoItem.setFieldKey(OrderFieldKey.ORDER_NO);
-    orderNoItem.setSourceIndex(0);
-    orderNoItem.setEnabled(true);
-    orderNoItem.setSortOrder(0);
-    mapping.getItems().add(orderNoItem);
-
-    List<ExcelHeaderDto> templateHeaders = List.of(new ExcelHeaderDto(0, "订单编号"));
-
-    List<DailyTableRowDto> rows =
-        List.of(
-            DailyTableRowDto.builder()
-                .orderNo("O1")
-                .quantity(1)
-                .shippingFee(new BigDecimal("5"))
-                .supplyPrice(new BigDecimal("10"))
-                .afterSalesRemark("质量问题")
-                .build());
-
-    byte[] bytes =
-        service.writePlatformReconcileTable("平台A对账", rows, mapping, templateHeaders);
-
-    try (XSSFWorkbook workbook = new XSSFWorkbook(new java.io.ByteArrayInputStream(bytes))) {
-      var headerRow = workbook.getSheetAt(0).getRow(0);
-      assertEquals("售后原因", headerRow.getCell(1).getStringCellValue());
-      assertEquals("供货价", headerRow.getCell(2).getStringCellValue());
-      assertEquals("总价", headerRow.getCell(3).getStringCellValue());
-      var dataRow = workbook.getSheetAt(0).getRow(1);
-      assertEquals("质量问题", dataRow.getCell(1).getStringCellValue());
-      assertEquals(10.0, dataRow.getCell(2).getNumericCellValue(), 0.001);
-      assertEquals(15.0, dataRow.getCell(3).getNumericCellValue(), 0.001);
     }
   }
 }

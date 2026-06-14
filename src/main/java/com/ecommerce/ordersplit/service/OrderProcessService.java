@@ -772,7 +772,7 @@ public class OrderProcessService {
     }
 
     /**
-     * 平台对账导出（不含平台/商家/成本价）
+     * 平台对账导出（系统固定表头，含供货价、总价，不含平台/商家/成本价）
      */
     @Transactional(readOnly = true)
     public ReconcileExportResponse exportPlatformReconcile(ReconcileExportRequest request) {

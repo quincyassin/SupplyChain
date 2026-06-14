@@ -1,7 +1,6 @@
 package com.ecommerce.ordersplit.service;
 
 import com.ecommerce.ordersplit.dto.DailyTableRowDto;
-import com.ecommerce.ordersplit.dto.PlatformExportTemplateDto;
 import com.ecommerce.ordersplit.entity.ImportOrder;
 import com.ecommerce.ordersplit.exception.BusinessException;
 import com.ecommerce.ordersplit.repository.ImportOrderRepository;
@@ -26,7 +25,6 @@ public class ReconcileExportService {
     private final ImportOrderRepository importOrderRepository;
     private final ImportOrderQueryService importOrderQueryService;
     private final ExcelWriterService excelWriterService;
-    private final PlatformMappingTemplateService platformMappingTemplateService;
 
     public byte[] exportMerchantReconcile(LocalDate startDate, LocalDate endDate, String merchant)
             throws IOException {
@@ -58,14 +56,7 @@ public class ReconcileExportService {
         if (rows.isEmpty()) {
             throw new BusinessException("当前日期区间内没有该平台的订单");
         }
-        PlatformExportTemplateDto exportTemplate =
-                platformMappingTemplateService.resolveExportTemplate(normalizedPlatform);
-        return excelWriterService.writePlatformReconcileTable(
-                normalizedPlatform,
-                normalizedPlatform + "对账",
-                rows,
-                exportTemplate.getMapping(),
-                exportTemplate.getTemplateHeaders());
+        return excelWriterService.writePlatformReconcileTable(normalizedPlatform + "对账", rows);
     }
 
     private List<DailyTableRowDto> loadRows(

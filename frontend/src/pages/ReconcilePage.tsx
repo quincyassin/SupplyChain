@@ -296,7 +296,7 @@ export default function ReconcilePage() {
       children: (
         <Space direction="vertical" size={12} style={{ width: "100%" }}>
           <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
-            按平台导出对账 Excel，包含供货价、总价（供货价×数量+运费），不含平台、商家、成本价列。
+            按平台导出对账 Excel，使用系统固定表头，包含供货价、总价（供货价×数量+运费），不含平台、商家、成本价列。
           </Typography.Paragraph>
           <Space wrap align="center">
             <Typography.Text>选择平台</Typography.Text>
