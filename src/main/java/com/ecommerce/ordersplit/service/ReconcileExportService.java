@@ -67,7 +67,7 @@ public class ReconcileExportService {
         LocalDateTime rangeEndExclusive = normalizedEnd.plusDays(1).atStartOfDay();
         List<ImportOrder> orders =
                 importOrderRepository
-                        .findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByPlatformAscMerchantAscSystemNoAsc(
+                        .findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByIssueDateAsc(
                                 rangeStart, rangeEndExclusive);
         List<DailyTableRowDto> rows = new ArrayList<>();
         for (ImportOrder order : orders) {

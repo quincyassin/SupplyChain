@@ -23,6 +23,9 @@ public interface ImportOrderRepository extends JpaRepository<ImportOrder, String
     List<ImportOrder> findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByPlatformAscMerchantAscSystemNoAsc(
             LocalDateTime startInclusive, LocalDateTime endExclusive);
 
+    List<ImportOrder> findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByIssueDateAsc(
+            LocalDateTime startInclusive, LocalDateTime endExclusive);
+
     /**
      * 查询尚未归属具体商家的订单（用于新增/调整商家配置后批量重分单）
      */
