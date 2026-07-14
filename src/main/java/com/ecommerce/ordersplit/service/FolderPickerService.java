@@ -22,14 +22,15 @@ import javax.swing.UIManager;
 import org.springframework.stereotype.Service;
 
 /**
- * 本机文件夹选择器：Windows 桌面优先同进程 Swing（javaw 下更可靠）；macOS 用 osascript；失败时 PowerShell 兜底。
+ * 本机文件夹选择器：Windows 桌面优先同进程 Swing（javaw 下更可靠）；macOS 用 osascript；失败时 PowerShell
+ * 兜底。
  *
  * @author huangxinsong
  */
 @Service
 public class FolderPickerService {
 
-    private static final String APP_NAME = "分单发单助手";
+    private static final String APP_NAME = "电商助手";
 
     /** PowerShell 文件夹对话框用户取消时的退出码 */
     static final int WINDOWS_PICK_CANCEL_EXIT_CODE = 2;
@@ -40,13 +41,14 @@ public class FolderPickerService {
         UNAVAILABLE
     }
 
-    record NativePickOutcome(NativePickStatus status, Path path) {}
+    record NativePickOutcome(NativePickStatus status, Path path) {
+    }
 
     /**
      * 弹出系统文件夹选择对话框
      *
      * @param initialDirectory 初始打开目录，可为 null
-     * @param dialogTitle 对话框标题
+     * @param dialogTitle      对话框标题
      * @return 选中目录；用户取消则 empty
      */
     public Optional<Path> pickDirectory(Path initialDirectory, String dialogTitle) {
@@ -84,8 +86,7 @@ public class FolderPickerService {
 
     private Optional<Path> pickDirectoryOnWindowsPowerShellFallback(
             Path initialDirectory, String title, BusinessException swingFailure) {
-        NativePickOutcome powerShellOutcome =
-                pickDirectoryWithWindowsPowerShell(initialDirectory, title);
+        NativePickOutcome powerShellOutcome = pickDirectoryWithWindowsPowerShell(initialDirectory, title);
         if (powerShellOutcome.status() == NativePickStatus.CANCELLED) {
             return Optional.empty();
         }
@@ -116,13 +117,12 @@ public class FolderPickerService {
 
     private NativePickOutcome pickDirectoryWithMacOsScript(Path initialDirectory, String title) {
         try {
-            Process process =
-                    new ProcessBuilder(
-                                    "osascript",
-                                    "-e",
-                                    buildMacOsChooseFolderScript(initialDirectory, title))
-                            .redirectErrorStream(true)
-                            .start();
+            Process process = new ProcessBuilder(
+                    "osascript",
+                    "-e",
+                    buildMacOsChooseFolderScript(initialDirectory, title))
+                    .redirectErrorStream(true)
+                    .start();
             ProcessOutput output = readProcessOutput(process);
             if (output.exitCode() == 0 && !output.text().isBlank()) {
                 return new NativePickOutcome(
@@ -139,12 +139,11 @@ public class FolderPickerService {
 
     private NativePickOutcome pickDirectoryWithWindowsPowerShell(Path initialDirectory, String title) {
         try {
-            Process process =
-                    new ProcessBuilder(
-                                    buildWindowsPowerShellPickCommand(
-                                            initialDirectory, title))
-                            .redirectErrorStream(true)
-                            .start();
+            Process process = new ProcessBuilder(
+                    buildWindowsPowerShellPickCommand(
+                            initialDirectory, title))
+                    .redirectErrorStream(true)
+                    .start();
             ProcessOutput output = readProcessOutput(process);
             return resolveWindowsPowerShellOutcome(output.exitCode(), output.text());
         } catch (IOException ex) {
@@ -166,9 +165,8 @@ public class FolderPickerService {
     static String buildMacOsChooseFolderScript(Path initialDirectory, String title) {
         String escapedTitle = escapeAppleScriptString(title);
         if (initialDirectory != null && Files.isDirectory(initialDirectory)) {
-            String escapedPath =
-                    escapeAppleScriptString(
-                            initialDirectory.toAbsolutePath().normalize().toString());
+            String escapedPath = escapeAppleScriptString(
+                    initialDirectory.toAbsolutePath().normalize().toString());
             return String.format(
                     "POSIX path of (choose folder with prompt \"%s\" default location (POSIX file \"%s\"))",
                     escapedTitle, escapedPath);
@@ -199,8 +197,7 @@ public class FolderPickerService {
     static String resolveWindowsPowerShellExecutable() {
         String systemRoot = System.getenv("SystemRoot");
         if (systemRoot != null && !systemRoot.isBlank()) {
-            Path bundled =
-                    Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+            Path bundled = Path.of(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
             if (Files.isRegularFile(bundled)) {
                 return bundled.toString();
             }
@@ -345,9 +342,8 @@ public class FolderPickerService {
     }
 
     private ProcessOutput readProcessOutput(Process process) throws IOException {
-        try (BufferedReader reader =
-                new BufferedReader(
-                        new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String text = reader.lines().collect(Collectors.joining(System.lineSeparator())).trim();
             int exitCode = process.waitFor();
             return new ProcessOutput(exitCode, text);
@@ -357,7 +353,8 @@ public class FolderPickerService {
         }
     }
 
-    private record ProcessOutput(int exitCode, String text) {}
+    private record ProcessOutput(int exitCode, String text) {
+    }
 
     private void configureMacAwtProperties() {
         System.setProperty("apple.awt.application.name", APP_NAME);

@@ -33,7 +33,9 @@ type AppMenuKey =
 
 type BusinessMenuKey = Exclude<AppMenuKey, "manual">;
 
-function resolveManualModuleKey(businessMenu: BusinessMenuKey): ManualModuleKey {
+function resolveManualModuleKey(
+  businessMenu: BusinessMenuKey,
+): ManualModuleKey {
   if (businessMenu === "config") {
     return "header-mapping";
   }
@@ -131,7 +133,7 @@ export default function App() {
           }}
         />
         <Title level={5} className="app-header-title">
-          分单发单助手
+          电商助手
         </Title>
       </Header>
       {needActivate ? (

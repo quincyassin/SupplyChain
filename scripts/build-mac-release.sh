@@ -284,7 +284,7 @@ HOST_ARCH="$(detect_arch)"
 warn_intel_build_on_apple_silicon "$HOST_ARCH" "$TARGET_ARCH"
 
 echo "=========================================="
-echo "  分单发单助手 - macOS 发布包构建"
+echo "  电商助手 - macOS 发布包构建"
 echo "  版本: $APP_VERSION  架构: $TARGET_ARCH"
 echo "=========================================="
 
