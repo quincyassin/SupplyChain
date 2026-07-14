@@ -66,6 +66,7 @@ class MerchantConfigServiceTest {
   @Test
   void create_shouldPersistKeywords() {
     when(merchantConfigRepository.findByName("商家A")).thenReturn(Optional.empty());
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of());
     when(merchantConfigRepository.save(org.mockito.ArgumentMatchers.any()))
         .thenAnswer(
             inv -> {
@@ -73,7 +74,7 @@ class MerchantConfigServiceTest {
               entity.setId(10L);
               return entity;
             });
-    when(importOrderPersistenceService.reassignAllPendingOrders())
+    when(importOrderPersistenceService.reassignOrdersForRecentWeek())
         .thenReturn(new ReassignPendingOrdersResult(5, 3, 2));
 
     SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
@@ -86,7 +87,7 @@ class MerchantConfigServiceTest {
     assertEquals(5, dto.getReassignedScannedCount());
     assertEquals(3, dto.getReassignedMatchedCount());
     assertEquals(2, dto.getReassignedStillPendingCount());
-    org.mockito.Mockito.verify(importOrderPersistenceService).reassignAllPendingOrders();
+    org.mockito.Mockito.verify(importOrderPersistenceService).reassignOrdersForRecentWeek();
   }
 
   @Test
@@ -120,9 +121,10 @@ class MerchantConfigServiceTest {
     hidden.setVisibility(MerchantConfigVisibility.HIDDEN);
 
     when(merchantConfigRepository.findByName("手工商家")).thenReturn(Optional.of(hidden));
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of(hidden));
     when(merchantConfigRepository.save(org.mockito.ArgumentMatchers.any()))
         .thenAnswer(inv -> inv.getArgument(0));
-    when(importOrderPersistenceService.reassignAllPendingOrders())
+    when(importOrderPersistenceService.reassignOrdersForRecentWeek())
         .thenReturn(new ReassignPendingOrdersResult(0, 0, 0));
 
     SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
@@ -134,7 +136,100 @@ class MerchantConfigServiceTest {
     assertEquals(List.of("关键字"), dto.getKeywords());
     assertEquals(MerchantConfigVisibility.VISIBLE, hidden.getVisibility());
     verify(merchantConfigRepository).save(hidden);
-    org.mockito.Mockito.verify(importOrderPersistenceService).reassignAllPendingOrders();
+    org.mockito.Mockito.verify(importOrderPersistenceService).reassignOrdersForRecentWeek();
+  }
+
+  @Test
+  void create_shouldRejectKeywordUsedByAnotherMerchant() {
+    MerchantConfig other = new MerchantConfig();
+    other.setId(1L);
+    other.setName("商家A");
+    other.setKeywordsJson("[\"耐克\"]");
+    other.setVisibility(MerchantConfigVisibility.VISIBLE);
+
+    when(merchantConfigRepository.findByName("商家B")).thenReturn(Optional.empty());
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of(other));
+
+    SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
+    request.setName("商家B");
+    request.setKeywords(List.of("耐克"));
+
+    BusinessException ex =
+        assertThrows(BusinessException.class, () -> service.create(request));
+    assertEquals("关键字「耐克」已被商家「商家A」使用", ex.getMessage());
+  }
+
+  @Test
+  void create_shouldRejectKeywordConflictIgnoreCase() {
+    MerchantConfig other = new MerchantConfig();
+    other.setId(1L);
+    other.setName("商家A");
+    other.setKeywordsJson("[\"Nike\"]");
+    other.setVisibility(MerchantConfigVisibility.VISIBLE);
+
+    when(merchantConfigRepository.findByName("商家B")).thenReturn(Optional.empty());
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of(other));
+
+    SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
+    request.setName("商家B");
+    request.setKeywords(List.of("nike"));
+
+    BusinessException ex =
+        assertThrows(BusinessException.class, () -> service.create(request));
+    assertEquals("关键字「nike」已被商家「商家A」使用", ex.getMessage());
+  }
+
+  @Test
+  void update_shouldRejectKeywordUsedByAnotherMerchant() {
+    MerchantConfig self = new MerchantConfig();
+    self.setId(2L);
+    self.setName("商家B");
+    self.setKeywordsJson("[\"阿迪\"]");
+    self.setVisibility(MerchantConfigVisibility.VISIBLE);
+
+    MerchantConfig other = new MerchantConfig();
+    other.setId(1L);
+    other.setName("商家A");
+    other.setKeywordsJson("[\"耐克\"]");
+    other.setVisibility(MerchantConfigVisibility.VISIBLE);
+
+    when(merchantConfigRepository.findById(2L)).thenReturn(Optional.of(self));
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of(other, self));
+
+    SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
+    request.setName("商家B");
+    request.setKeywords(List.of("耐克"));
+
+    BusinessException ex =
+        assertThrows(BusinessException.class, () -> service.update(2L, request));
+    assertEquals("关键字「耐克」已被商家「商家A」使用", ex.getMessage());
+  }
+
+  @Test
+  void update_shouldAllowKeepingOwnKeywords() {
+    MerchantConfig self = new MerchantConfig();
+    self.setId(2L);
+    self.setName("商家B");
+    self.setKeywordsJson("[\"耐克\",\"AJ\"]");
+    self.setVisibility(MerchantConfigVisibility.VISIBLE);
+
+    when(merchantConfigRepository.findById(2L)).thenReturn(Optional.of(self));
+    when(merchantConfigRepository.findAllByOrderByNameAsc()).thenReturn(List.of(self));
+    when(merchantConfigRepository.save(org.mockito.ArgumentMatchers.any()))
+        .thenAnswer(inv -> inv.getArgument(0));
+    when(importOrderPersistenceService.reassignOrdersForRecentWeek())
+        .thenReturn(new ReassignPendingOrdersResult(3, 2, 1));
+
+    SaveMerchantConfigRequest request = new SaveMerchantConfigRequest();
+    request.setName("商家B");
+    request.setKeywords(List.of("耐克", "AJ", "新款"));
+
+    var dto = service.update(2L, request);
+    assertEquals(List.of("耐克", "AJ", "新款"), dto.getKeywords());
+    assertEquals(3, dto.getReassignedScannedCount());
+    assertEquals(2, dto.getReassignedMatchedCount());
+    assertEquals(1, dto.getReassignedStillPendingCount());
+    org.mockito.Mockito.verify(importOrderPersistenceService).reassignOrdersForRecentWeek();
   }
 
   @Test

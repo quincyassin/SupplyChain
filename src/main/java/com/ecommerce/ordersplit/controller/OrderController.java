@@ -218,8 +218,10 @@ public class OrderController {
     }
 
     @PostMapping("/read-headers")
-    public ResponseEntity<ReadHeadersResponse> readHeaders(@RequestParam("file") MultipartFile file) {
-        return ResponseEntity.ok(orderProcessService.readHeaders(file));
+    public ResponseEntity<ReadHeadersResponse> readHeaders(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "platform", required = false) String platform) {
+        return ResponseEntity.ok(orderProcessService.readHeaders(file, platform));
     }
 
     /**
@@ -228,8 +230,10 @@ public class OrderController {
     @PostMapping("/import/preview-duplicates")
     public ResponseEntity<ImportDuplicatePreviewDto> previewImportDuplicates(
             @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "mapping", required = false) String mapping) {
-        return ResponseEntity.ok(orderProcessService.previewImportDuplicates(file, mapping));
+            @RequestParam(value = "mapping", required = false) String mapping,
+            @RequestParam(value = "platform", required = false) String platform) {
+        return ResponseEntity.ok(
+                orderProcessService.previewImportDuplicates(file, mapping, platform));
     }
 
     /**
@@ -240,9 +244,11 @@ public class OrderController {
             @RequestParam("file") MultipartFile file,
             @RequestParam(value = "mapping", required = false) String mapping,
             @RequestParam(value = "includeDuplicateOrderNos", defaultValue = "true")
-                    boolean includeDuplicateOrderNos) {
+                    boolean includeDuplicateOrderNos,
+            @RequestParam(value = "platform", required = false) String platform) {
         return ResponseEntity.ok(
-                orderProcessService.importByPlatform(file, mapping, includeDuplicateOrderNos));
+                orderProcessService.importByPlatform(
+                        file, mapping, includeDuplicateOrderNos, platform));
     }
 
     /**

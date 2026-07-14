@@ -99,6 +99,10 @@ export interface ReadHeadersResult {
   suggestedMapping: ColumnMappingItem[];
   fields: OrderFieldMeta[];
   matchedPlatform?: string | null;
+  /** 表头命中的候选平台（歧义时供用户选择） */
+  candidatePlatforms?: string[];
+  /** 是否存在多平台同分歧义，需用户手动选择 */
+  platformAmbiguous?: boolean;
 }
 
 export type ReceiptStatus = "PENDING" | "RECEIPTED";
@@ -265,11 +269,11 @@ export interface MerchantConfigItem {
   name: string;
   keywords: string[];
   updatedAt?: string;
-  /** 新增后自动重分单：扫描的未定义订单数 */
+  /** 保存后重匹配近一周订单：扫描条数 */
   reassignedScannedCount?: number;
-  /** 新增后自动重分单：成功匹配商家的订单数 */
+  /** 保存后重匹配近一周订单：匹配到商家的条数 */
   reassignedMatchedCount?: number;
-  /** 新增后自动重分单：仍为未定义的订单数 */
+  /** 保存后重匹配近一周订单：仍为未定义的条数 */
   reassignedStillPendingCount?: number;
 }
 
@@ -854,9 +858,15 @@ export async function suggestExcelHeaders(
   }
 }
 
-export async function readExcelHeaders(file: File): Promise<ReadHeadersResult> {
+export async function readExcelHeaders(
+  file: File,
+  platform?: string | null,
+): Promise<ReadHeadersResult> {
   const formData = new FormData();
   formData.append("file", file);
+  if (platform != null && platform.trim() !== "") {
+    formData.append("platform", platform.trim());
+  }
   try {
     const { data } = await client.post<ReadHeadersResult>(
       "/read-headers",
@@ -894,10 +904,14 @@ export interface ImportDuplicatePreview {
 export async function previewImportDuplicates(
   file: File,
   mapping: ColumnMappingItem[] | null,
+  platform?: string | null,
 ): Promise<ImportDuplicatePreview> {
   const formData = new FormData();
   formData.append("file", file);
   appendMapping(formData, mapping);
+  if (platform != null && platform.trim() !== "") {
+    formData.append("platform", platform.trim());
+  }
   try {
     const { data } = await client.post<ImportDuplicatePreview>(
       "/import/preview-duplicates",
@@ -914,6 +928,7 @@ export async function importOrdersByPlatform(
   file: File,
   mapping: ColumnMappingItem[] | null,
   includeDuplicateOrderNos = true,
+  platform?: string | null,
 ): Promise<SplitResult> {
   const formData = new FormData();
   formData.append("file", file);
@@ -922,6 +937,9 @@ export async function importOrdersByPlatform(
     "includeDuplicateOrderNos",
     includeDuplicateOrderNos ? "true" : "false",
   );
+  if (platform != null && platform.trim() !== "") {
+    formData.append("platform", platform.trim());
+  }
   try {
     const { data } = await client.post<SplitResult>("/import", formData, {
       headers: { "Content-Type": "multipart/form-data" },

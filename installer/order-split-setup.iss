@@ -3,25 +3,27 @@
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
+#define MyAppName "电商助手"
 
 [Setup]
 AppId={{A7B3C9D1-E2F4-4A6B-8C0D-1E2F3A4B5C6D}
-AppName=OrderSplitMerge
+AppName={#MyAppName}
 AppVersion={#AppVersion}
-AppVerName=OrderSplitMerge {#AppVersion}
-AppPublisher=OrderSplitMerge
+AppVerName={#MyAppName} {#AppVersion}
+AppPublisher={#MyAppName}
 DefaultDirName={autopf}\OrderSplitMerge
-DefaultGroupName=OrderSplitMerge
+DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=OrderSplitMerge_Setup_{#AppVersion}
+SetupIconFile=..\packaging\windows\app.ico
 Compression=lzma
 SolidCompression=yes
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 VersionInfoVersion={#AppVersionInfo}
-VersionInfoProductName=OrderSplitMerge
-VersionInfoCompany=OrderSplitMerge
+VersionInfoProductName={#MyAppName}
+VersionInfoCompany={#MyAppName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -31,16 +33,17 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\release\staging\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\packaging\windows\app.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\OrderSplitMerge"; Filename: "{app}\start.bat"; WorkingDir: "{app}"
+Name: "{group}\{#MyAppName}"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"
 Name: "{group}\Stop"; Filename: "{app}\stop.bat"; WorkingDir: "{app}"
 Name: "{group}\README"; Filename: "{app}\README.txt"
 Name: "{group}\Uninstall"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\OrderSplitMerge"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\start.bat"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\start.bat"; Description: "Launch OrderSplitMerge"; Flags: nowait postinstall skipifsilent shellexec
+Filename: "{app}\start.bat"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent shellexec
 
 [UninstallRun]
 Filename: "{app}\stop.bat"; Flags: runhidden waituntilterminated skipifdoesntexist

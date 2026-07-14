@@ -1,12 +1,12 @@
 package com.ecommerce.ordersplit.dto;
 
 /**
- * 按最新商家关键字对未分单订单重新匹配的结果
+ * 按最新商家关键字对订单重新匹配的结果
  *
  * @author huangxinsong
  */
 public record ReassignPendingOrdersResult(
-    /** 扫描的待分单订单数（商家为空、未定义或未匹配） */
+    /** 扫描的订单数（今日重匹配 / 未分单重匹配等场景） */
     int scannedOrderCount,
     /** 成功匹配到具体商家的订单数 */
     int matchedOrderCount,

@@ -303,4 +303,81 @@ class PlatformMappingTemplateServiceTest {
                     new ExcelHeaderDto(1, "商品名称"),
                     new ExcelHeaderDto(2, "数量"))));
   }
+
+  @Test
+  void resolveImportPlatform_shouldMarkAmbiguousWhenMultiplePlatformsScoreEqually() {
+    String headersJson =
+        "[{\"columnIndex\":0,\"headerName\":\"订单编号\"},"
+            + "{\"columnIndex\":1,\"headerName\":\"商品名称\"},"
+            + "{\"columnIndex\":2,\"headerName\":\"数量\"}]";
+    String mappingJson =
+        "[{\"fieldKey\":\"orderNo\",\"sourceIndex\":0,\"enabled\":true,\"sortOrder\":0},"
+            + "{\"fieldKey\":\"productName\",\"sourceIndex\":1,\"enabled\":true,\"sortOrder\":1},"
+            + "{\"fieldKey\":\"quantity\",\"sourceIndex\":2,\"enabled\":true,\"sortOrder\":2}]";
+
+    PlatformMappingTemplate templateA = new PlatformMappingTemplate();
+    templateA.setPlatform("淘宝");
+    templateA.setTemplateHeadersJson(headersJson);
+    templateA.setMappingJson(mappingJson);
+
+    PlatformMappingTemplate templateB = new PlatformMappingTemplate();
+    templateB.setPlatform("拼多多");
+    templateB.setTemplateHeadersJson(headersJson);
+    templateB.setMappingJson(mappingJson);
+
+    when(templateRepository.findAllByOrderByUpdatedAtDesc())
+        .thenReturn(List.of(templateA, templateB));
+    when(templateRepository.findByPlatform("淘宝")).thenReturn(Optional.of(templateA));
+    when(templateRepository.findByPlatform("拼多多")).thenReturn(Optional.of(templateB));
+
+    PlatformHeaderMatchResult result =
+        service.resolveImportPlatform(
+            List.of(
+                new ExcelHeaderDto(0, "订单编号"),
+                new ExcelHeaderDto(1, "商品名称"),
+                new ExcelHeaderDto(2, "数量")));
+
+    assertTrue(result.ambiguous());
+    assertEquals(2, result.candidates().size());
+    assertEquals(
+        List.of("淘宝", "拼多多"),
+        result.candidates().stream().map(TemplateHeaderMatch::platform).toList());
+  }
+
+  @Test
+  void matchByPlatform_shouldResolveWhenHeadersMatchSelectedPlatform() {
+    String headersJson =
+        "[{\"columnIndex\":0,\"headerName\":\"订单编号\"},"
+            + "{\"columnIndex\":1,\"headerName\":\"商品名称\"},"
+            + "{\"columnIndex\":2,\"headerName\":\"数量\"}]";
+    String mappingJson =
+        "[{\"fieldKey\":\"orderNo\",\"sourceIndex\":0,\"enabled\":true,\"sortOrder\":0},"
+            + "{\"fieldKey\":\"productName\",\"sourceIndex\":1,\"enabled\":true,\"sortOrder\":1},"
+            + "{\"fieldKey\":\"quantity\",\"sourceIndex\":2,\"enabled\":true,\"sortOrder\":2}]";
+
+    PlatformMappingTemplate templateA = new PlatformMappingTemplate();
+    templateA.setPlatform("淘宝");
+    templateA.setTemplateHeadersJson(headersJson);
+    templateA.setMappingJson(mappingJson);
+
+    PlatformMappingTemplate templateB = new PlatformMappingTemplate();
+    templateB.setPlatform("拼多多");
+    templateB.setTemplateHeadersJson(headersJson);
+    templateB.setMappingJson(mappingJson);
+
+    when(templateRepository.findAllByOrderByUpdatedAtDesc())
+        .thenReturn(List.of(templateA, templateB));
+    when(templateRepository.findByPlatform("淘宝")).thenReturn(Optional.of(templateA));
+    when(templateRepository.findByPlatform("拼多多")).thenReturn(Optional.of(templateB));
+
+    TemplateHeaderMatch match =
+        service.matchByPlatform(
+            "拼多多",
+            List.of(
+                new ExcelHeaderDto(0, "订单编号"),
+                new ExcelHeaderDto(1, "商品名称"),
+                new ExcelHeaderDto(2, "数量")));
+
+    assertEquals("拼多多", match.platform());
+  }
 }

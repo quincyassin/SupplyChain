@@ -74,14 +74,18 @@ function upsertMerchantItem(
   return sortMerchantsByUpdatedAt([item, ...rest]);
 }
 
-function buildCreateSuccessMessage(saved: MerchantConfigItem): string {
+function buildSaveSuccessMessage(
+  saved: MerchantConfigItem,
+  isEdit: boolean,
+): string {
+  const prefix = isEdit ? "已更新" : "已新增";
   const scanned = saved.reassignedScannedCount ?? 0;
   const matched = saved.reassignedMatchedCount ?? 0;
   const stillPending = saved.reassignedStillPendingCount ?? 0;
   if (scanned <= 0) {
-    return "已新增";
+    return prefix;
   }
-  let message = `已新增，已扫描 ${scanned} 条未分单订单`;
+  let message = `${prefix}，已重匹配近一周 ${scanned} 条订单`;
   if (matched > 0) {
     message += `，${matched} 条已匹配到商家`;
   }
@@ -179,10 +183,10 @@ export default function MerchantConfigPanel() {
       const saved = editing
         ? await updateMerchantConfig(editing.id, payload)
         : await createMerchantConfig(payload);
-      message.success(editing ? "已更新" : buildCreateSuccessMessage(saved));
+      message.success(buildSaveSuccessMessage(saved, editing != null));
       closeModal();
       const list = await fetchMerchantConfigs();
-      applyList(upsertMerchantItem(list, saved), { resetPage: !editing });
+      applyList(upsertMerchantItem(list, saved), { resetPage: editing == null });
     } catch (err: unknown) {
       message.error(err instanceof Error ? err.message : "保存失败");
     } finally {

@@ -21,6 +21,7 @@ import {
   List,
   Modal,
   Popconfirm,
+  Radio,
   Select,
   Space,
   Spin,
@@ -79,7 +80,6 @@ import {
   readExcelHeaders,
   updateImportedOrderFields,
   type EditableOrderFieldKey,
-  updateImportedOrderMerchant,
 } from "../api/orderApi";
 import { useResizableColumns } from "../hooks/useResizableColumns";
 import { useTableBodyScrollY } from "../hooks/useTableBodyScrollY";
@@ -609,150 +609,20 @@ function parseRowKey(key: Key): string | null {
   return text || null;
 }
 
-interface EditableMerchantCellProps {
-  value: string;
-  orderSystemNo?: string;
-  orderDate: string;
-  onUpdated: (context: OrderCellUpdatedContext) => void | Promise<void>;
-}
-
-interface EditableMerchantDisplayProps {
-  value: string;
-  orderSystemNo?: string;
-  onStartEdit: () => void;
-}
-
-/** 商家列展示态：无 draft/saving 等编辑 hooks */
-const EditableMerchantDisplay = memo(function EditableMerchantDisplay({
-  value,
-  orderSystemNo,
-  onStartEdit,
-}: EditableMerchantDisplayProps) {
-  const displayText = value.trim() || "点击设置";
-  const isPending = value === PENDING_SPLIT_MERCHANT;
-
+/** 商家列只读展示（归属由商家配置关键字匹配，首页不可编辑） */
+function renderMerchantCell(merchant: string | undefined) {
+  const value = resolveRowMerchantName(merchant);
+  const isPending = value === PENDING_SPLIT_MERCHANT || !value.trim();
   return (
     <Typography.Text
-      className={
-        isPending || !value.trim() ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined
-      }
-      type={isPending || !value.trim() ? "secondary" : undefined}
-      style={{
-        cursor: !orderSystemNo ? "not-allowed" : "pointer",
-        userSelect: "none",
-      }}
-      ellipsis={{ tooltip: value || "点击设置商家" }}
-      onClick={() => {
-        if (orderSystemNo) {
-          onStartEdit();
-        }
-      }}
+      className={isPending ? ORDER_TABLE_EMPTY_HINT_CLASS : undefined}
+      type={isPending ? "secondary" : undefined}
+      ellipsis={{ tooltip: value || undefined }}
     >
-      {displayText}
+      {value || "-"}
     </Typography.Text>
   );
-});
-
-interface EditableMerchantEditorProps extends EditableMerchantCellProps {
-  onClose: () => void;
 }
-
-/** 商家列编辑态：仅在点击后挂载 */
-function EditableMerchantEditor({
-  value,
-  orderSystemNo,
-  orderDate,
-  onUpdated,
-  onClose,
-}: EditableMerchantEditorProps) {
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const inputRef = useRef<InputRef>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-    inputRef.current?.select();
-  }, []);
-
-  const cancelEdit = () => {
-    setDraft(value);
-    onClose();
-  };
-
-  const commit = async () => {
-    const trimmed = draft.trim();
-    if (!orderSystemNo) {
-      cancelEdit();
-      return;
-    }
-    if (trimmed === "" || trimmed === value.trim()) {
-      cancelEdit();
-      return;
-    }
-    setSaving(true);
-    try {
-      await updateImportedOrderMerchant(orderSystemNo, trimmed, orderDate);
-      await onUpdated({ patch: { merchant: trimmed } });
-      onClose();
-    } catch (err: unknown) {
-      message.error(err instanceof Error ? err.message : "更新商家失败");
-      setDraft(value);
-      onClose();
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Input
-      ref={inputRef}
-      size="small"
-      value={draft}
-      maxLength={128}
-      placeholder="输入商家"
-      disabled={saving || !orderSystemNo}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => void commit()}
-      onPressEnter={() => void commit()}
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          cancelEdit();
-        }
-      }}
-    />
-  );
-}
-
-/** 表格内可编辑商家：点击后编辑，仅更新订单归属，不写入商家配置 */
-const EditableMerchantCell = memo(function EditableMerchantCell({
-  value,
-  orderSystemNo,
-  orderDate,
-  onUpdated,
-}: EditableMerchantCellProps) {
-  const [editing, setEditing] = useState(false);
-  const startEdit = useCallback(() => setEditing(true), []);
-
-  if (editing) {
-    return (
-      <EditableMerchantEditor
-        value={value}
-        orderSystemNo={orderSystemNo}
-        orderDate={orderDate}
-        onUpdated={onUpdated}
-        onClose={() => setEditing(false)}
-      />
-    );
-  }
-
-  return (
-    <EditableMerchantDisplay
-      value={value}
-      orderSystemNo={orderSystemNo}
-      onStartEdit={startEdit}
-    />
-  );
-});
 
 function normalizeShippingFeeValue(value: number | undefined): number {
   if (value == null || Number.isNaN(value)) {
@@ -1432,6 +1302,18 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     mapping: ColumnMappingItem[];
     matchedPlatform: string | null;
   } | null>(null);
+  /** 多平台表头歧义：待用户选择来源平台 */
+  const [platformSelectModalOpen, setPlatformSelectModalOpen] = useState(false);
+  const [candidatePlatforms, setCandidatePlatforms] = useState<string[]>([]);
+  const [selectedImportPlatform, setSelectedImportPlatform] = useState<
+    string | null
+  >(null);
+  const [platformSelectFile, setPlatformSelectFile] = useState<File | null>(
+    null,
+  );
+  /** 选平台后的确认导入弹窗 */
+  const [importConfirmModalOpen, setImportConfirmModalOpen] = useState(false);
+  const [importConfirmSubmitting, setImportConfirmSubmitting] = useState(false);
 
   const splitResult = useMemo(() => {
     if (orderDataset == null) {
@@ -1829,6 +1711,21 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const resetImportWizardState = () => {
+    setPlatformSelectModalOpen(false);
+    setImportConfirmModalOpen(false);
+    setCandidatePlatforms([]);
+    setSelectedImportPlatform(null);
+    setPlatformSelectFile(null);
+    setImportConfirmSubmitting(false);
+    setDuplicateModalOpen(false);
+    setDuplicatePreview(null);
+    setPendingImport(null);
+    setIncludeDuplicateOrderNos(false);
+    setFile(null);
+    setMatchedPlatform(null);
+  };
+
   const performImport = async (
     uploadFile: File,
     mapping: ColumnMappingItem[],
@@ -1839,6 +1736,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
       uploadFile,
       mapping,
       includeDuplicates,
+      matchedPlatform,
     );
     const today = formatLocalDateKey();
     const todayRange = { start: today, end: today };
@@ -1856,38 +1754,61 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     }
   };
 
+  /** 唯一定平台后：预览重复 → 直接导入或弹出重复确认 */
+  const continueImportAfterPlatformResolved = async (
+    uploadFile: File,
+    mapping: ColumnMappingItem[],
+    resolvedPlatform: string | null,
+  ) => {
+    if (mapping.length === 0) {
+      setErrorAlert("未能匹配表头，请检查系统配置中的平台模板");
+      return;
+    }
+    const preview = await previewImportDuplicates(
+      uploadFile,
+      mapping,
+      resolvedPlatform,
+    );
+    if (!preview.orderNoMapped || preview.duplicateRowCount === 0) {
+      await performImport(uploadFile, mapping, resolvedPlatform, false);
+      return;
+    }
+    setPendingImport({
+      file: uploadFile,
+      mapping,
+      matchedPlatform: resolvedPlatform,
+    });
+    setDuplicatePreview(preview);
+    setIncludeDuplicateOrderNos(false);
+    setDuplicateModalOpen(true);
+  };
+
   const loadHeaders = async (uploadFile: File) => {
     setHeaderLoading(true);
     setErrorAlert(null);
     try {
       const result = await readExcelHeaders(uploadFile);
+      if (result.platformAmbiguous) {
+        const candidates = result.candidatePlatforms ?? [];
+        if (candidates.length === 0) {
+          setErrorAlert("表头匹配到多个平台，但未返回候选列表，请检查平台模板配置");
+          setFile(null);
+          return;
+        }
+        setMatchedPlatform(null);
+        setCandidatePlatforms(candidates);
+        setSelectedImportPlatform(null);
+        setPlatformSelectFile(uploadFile);
+        setPlatformSelectModalOpen(true);
+        return;
+      }
       const resolvedPlatform = result.matchedPlatform ?? null;
       setMatchedPlatform(resolvedPlatform);
-      if (result.suggestedMapping.length === 0) {
-        setErrorAlert("未能匹配表头，请检查系统配置中的平台模板");
-        return;
-      }
-      const preview = await previewImportDuplicates(
+      await continueImportAfterPlatformResolved(
         uploadFile,
         result.suggestedMapping,
+        resolvedPlatform,
       );
-      if (!preview.orderNoMapped || preview.duplicateRowCount === 0) {
-        await performImport(
-          uploadFile,
-          result.suggestedMapping,
-          resolvedPlatform,
-          false,
-        );
-        return;
-      }
-      setPendingImport({
-        file: uploadFile,
-        mapping: result.suggestedMapping,
-        matchedPlatform: resolvedPlatform,
-      });
-      setDuplicatePreview(preview);
-      setIncludeDuplicateOrderNos(false);
-      setDuplicateModalOpen(true);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "读取表头失败";
       setErrorAlert(msg);
@@ -1898,13 +1819,66 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
     }
   };
 
+  const handleCancelPlatformSelect = () => {
+    resetImportWizardState();
+  };
+
+  const handleConfirmPlatformSelect = () => {
+    if (selectedImportPlatform == null || selectedImportPlatform === "") {
+      message.warning("请先选择订单来源平台");
+      return;
+    }
+    setPlatformSelectModalOpen(false);
+    setImportConfirmModalOpen(true);
+  };
+
+  const handleCancelImportConfirm = () => {
+    resetImportWizardState();
+  };
+
+  /** 确认导入：按所选平台解析表头后进入重复检测/导入 */
+  const handleConfirmImportWithPlatform = async () => {
+    const uploadFile = platformSelectFile;
+    const chosenPlatform = selectedImportPlatform;
+    if (uploadFile == null || chosenPlatform == null) {
+      return;
+    }
+    setImportConfirmSubmitting(true);
+    setErrorAlert(null);
+    try {
+      const result = await readExcelHeaders(uploadFile, chosenPlatform);
+      if (result.platformAmbiguous || result.suggestedMapping.length === 0) {
+        setErrorAlert("按所选平台解析表头失败，请核对平台模板配置");
+        resetImportWizardState();
+        return;
+      }
+      const resolvedPlatform = result.matchedPlatform ?? chosenPlatform;
+      setMatchedPlatform(resolvedPlatform);
+      setImportConfirmModalOpen(false);
+      setPlatformSelectFile(null);
+      setCandidatePlatforms([]);
+      setSelectedImportPlatform(null);
+      setHeaderLoading(true);
+      try {
+        await continueImportAfterPlatformResolved(
+          uploadFile,
+          result.suggestedMapping,
+          resolvedPlatform,
+        );
+      } finally {
+        setHeaderLoading(false);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "导入失败";
+      setErrorAlert(msg);
+      resetImportWizardState();
+    } finally {
+      setImportConfirmSubmitting(false);
+    }
+  };
+
   const handleCancelDuplicateImport = () => {
-    setDuplicateModalOpen(false);
-    setDuplicatePreview(null);
-    setPendingImport(null);
-    setIncludeDuplicateOrderNos(false);
-    setFile(null);
-    setMatchedPlatform(null);
+    resetImportWizardState();
   };
 
   const handleConfirmDuplicateImport = async () => {
@@ -2431,14 +2405,7 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
         width: 72,
         fixed: "left" as const,
         ellipsis: true,
-        render: (merchant: string | undefined, record: SplitTableRow) => (
-          <EditableMerchantCell
-            value={resolveRowMerchantName(merchant)}
-            orderSystemNo={record.systemNo}
-            orderDate={resolveRowIssueDateKey(record, queryDateRange.end)}
-            onUpdated={(context) => notifyOrderCellUpdated(record, context)}
-          />
-        ),
+        render: (merchant: string | undefined) => renderMerchantCell(merchant),
       };
 
       const platformColumn = {
@@ -3431,6 +3398,47 @@ export default function UploadPanel({ onProcessed }: UploadPanelProps) {
           maxLength={512}
           showCount
         />
+      </Modal>
+
+      <Modal
+        title="选择订单来源平台"
+        open={platformSelectModalOpen}
+        onCancel={handleCancelPlatformSelect}
+        onOk={handleConfirmPlatformSelect}
+        okText="下一步"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Typography.Paragraph style={{ marginBottom: 12 }}>
+          当前 Excel 表头与多个平台模板一致，请选择本次订单的实际来源平台（影响平台标签与对账筛选）。
+        </Typography.Paragraph>
+        <Radio.Group
+          value={selectedImportPlatform}
+          onChange={(event) => setSelectedImportPlatform(event.target.value)}
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          {candidatePlatforms.map((platformName) => (
+            <Radio key={platformName} value={platformName}>
+              {platformName}
+            </Radio>
+          ))}
+        </Radio.Group>
+      </Modal>
+
+      <Modal
+        title="确认导入"
+        open={importConfirmModalOpen}
+        onCancel={handleCancelImportConfirm}
+        onOk={() => void handleConfirmImportWithPlatform()}
+        confirmLoading={importConfirmSubmitting}
+        okText="确认导入"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Typography.Paragraph style={{ marginBottom: 0 }}>
+          确认将「{platformSelectFile?.name ?? "当前文件"}」导入为平台「
+          {selectedImportPlatform ?? "-"}」的订单吗？
+        </Typography.Paragraph>
       </Modal>
 
       <Modal

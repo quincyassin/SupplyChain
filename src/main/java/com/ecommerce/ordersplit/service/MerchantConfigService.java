@@ -109,11 +109,13 @@ public class MerchantConfigService {
       if (entity.getVisibility() == MerchantConfigVisibility.VISIBLE) {
         throw new BusinessException("商家「" + name + "」已存在");
       }
+      assertKeywordsUniqueAcrossMerchants(keywords, entity.getId());
       entity.setKeywordsJson(writeKeywords(keywords));
       entity.setVisibility(MerchantConfigVisibility.VISIBLE);
       merchantConfigRepository.save(entity);
       return toDtoWithReassign(entity);
     }
+    assertKeywordsUniqueAcrossMerchants(keywords, null);
     MerchantConfig entity = new MerchantConfig();
     entity.setName(name);
     entity.setKeywordsJson(writeKeywords(keywords));
@@ -137,10 +139,39 @@ public class MerchantConfigService {
         merchantConfigRepository.delete(other);
       }
     }
+    assertKeywordsUniqueAcrossMerchants(keywords, entity.getId());
     entity.setName(name);
     entity.setKeywordsJson(writeKeywords(keywords));
     merchantConfigRepository.save(entity);
-    return toDto(entity);
+    return toDtoWithReassign(entity);
+  }
+
+  /**
+   * 跨商家关键字唯一约束：忽略大小写；VISIBLE 与 HIDDEN 一并校验。
+   *
+   * @param excludeMerchantId 当前正在保存的商家 ID，创建时传 null
+   */
+  private void assertKeywordsUniqueAcrossMerchants(
+      List<String> keywords, Long excludeMerchantId) {
+    List<MerchantConfig> allMerchants = merchantConfigRepository.findAllByOrderByNameAsc();
+    for (String keyword : keywords) {
+      String normalizedKeyword = keyword.toLowerCase(Locale.ROOT);
+      for (MerchantConfig other : allMerchants) {
+        if (excludeMerchantId != null && excludeMerchantId.equals(other.getId())) {
+          continue;
+        }
+        for (String otherKeyword : readKeywords(other)) {
+          if (otherKeyword == null) {
+            continue;
+          }
+          String normalizedOther = otherKeyword.trim().toLowerCase(Locale.ROOT);
+          if (!normalizedOther.isEmpty() && normalizedKeyword.equals(normalizedOther)) {
+            throw new BusinessException(
+                "关键字「" + keyword + "」已被商家「" + other.getName() + "」使用");
+          }
+        }
+      }
+    }
   }
 
   @Transactional
@@ -173,7 +204,7 @@ public class MerchantConfigService {
 
   private MerchantConfigDto toDtoWithReassign(MerchantConfig entity) {
     ReassignPendingOrdersResult reassign =
-        importOrderPersistenceService.reassignAllPendingOrders();
+        importOrderPersistenceService.reassignOrdersForRecentWeek();
     MerchantConfigDto dto = toDto(entity);
     dto.setReassignedScannedCount(reassign.scannedOrderCount());
     dto.setReassignedMatchedCount(reassign.matchedOrderCount());

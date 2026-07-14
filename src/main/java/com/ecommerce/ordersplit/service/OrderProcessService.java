@@ -43,6 +43,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -95,17 +96,53 @@ public class OrderProcessService {
                 headers,
                 columnMappingService.toDtos(suggested),
                 columnMappingService.listFields(),
-                null);
+                null,
+                List.of(),
+                false);
     }
 
     public ReadHeadersResponse readHeaders(MultipartFile file) {
+        return readHeaders(file, null);
+    }
+
+    /**
+     * 读取表头并匹配平台。指定 platform 时按该平台解析；未指定时自动匹配，歧义则返回候选列表。
+     */
+    public ReadHeadersResponse readHeaders(MultipartFile file, String platform) {
         List<ExcelHeaderDto> headers = excelParserService.readHeaders(file);
-        TemplateHeaderMatch match = platformMappingTemplateService.matchByHeaders(headers);
+        if (platform != null && !platform.isBlank()) {
+            TemplateHeaderMatch match =
+                    platformMappingTemplateService.matchByPlatform(platform.trim(), headers);
+            return new ReadHeadersResponse(
+                    headers,
+                    columnMappingService.toDtos(match.mapping()),
+                    columnMappingService.listFields(),
+                    match.platform(),
+                    List.of(match.platform()),
+                    false);
+        }
+
+        PlatformHeaderMatchResult result =
+                platformMappingTemplateService.resolveImportPlatform(headers);
+        List<String> candidates =
+                result.candidates().stream().map(TemplateHeaderMatch::platform).toList();
+        if (result.ambiguous()) {
+            return new ReadHeadersResponse(
+                    headers,
+                    List.of(),
+                    columnMappingService.listFields(),
+                    null,
+                    candidates,
+                    true);
+        }
+        TemplateHeaderMatch match = result.selected();
         return new ReadHeadersResponse(
                 headers,
                 columnMappingService.toDtos(match.mapping()),
                 columnMappingService.listFields(),
-                match.platform());
+                match.platform(),
+                candidates,
+                false);
     }
 
     /**
@@ -343,12 +380,17 @@ public class OrderProcessService {
      */
     @Transactional(readOnly = true)
     public ImportDuplicatePreviewDto previewImportDuplicates(MultipartFile file, String mappingJson) {
+        return previewImportDuplicates(file, mappingJson, null);
+    }
+
+    @Transactional(readOnly = true)
+    public ImportDuplicatePreviewDto previewImportDuplicates(
+            MultipartFile file, String mappingJson, String platform) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请上传 Excel 文件");
         }
         ParsedImportExcel parsed =
-                excelParserService.parseImportOnce(
-                        file, platformMappingTemplateService::matchByHeaders, false);
+                excelParserService.parseImportOnce(file, resolveMatchResolver(platform), false);
         ColumnMappingConfig mapping = columnMappingService.parseMappingJson(mappingJson, false);
         return importOrderDuplicateCheckService.buildPreview(parsed.rows(), mapping);
     }
@@ -358,16 +400,25 @@ public class OrderProcessService {
      */
     @Transactional
     public SplitResultResponse importByPlatform(MultipartFile file, String mappingJson) {
-        return importByPlatform(file, mappingJson, true);
+        return importByPlatform(file, mappingJson, true, null);
     }
 
     @Transactional
     public SplitResultResponse importByPlatform(
             MultipartFile file, String mappingJson, boolean includeDuplicateOrderNos) {
+        return importByPlatform(file, mappingJson, includeDuplicateOrderNos, null);
+    }
+
+    @Transactional
+    public SplitResultResponse importByPlatform(
+            MultipartFile file,
+            String mappingJson,
+            boolean includeDuplicateOrderNos,
+            String platform) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请上传 Excel 文件");
         }
-        return splitByMerchant(file, mappingJson, includeDuplicateOrderNos);
+        return splitByMerchant(file, mappingJson, includeDuplicateOrderNos, platform);
     }
 
     public AssignMerchantResult assignPendingMerchantsForRange(
@@ -627,12 +678,21 @@ public class OrderProcessService {
      */
     @Transactional
     public SplitResultResponse splitByMerchant(MultipartFile file, String mappingJson) {
-        return splitByMerchant(file, mappingJson, true);
+        return splitByMerchant(file, mappingJson, true, null);
     }
 
     @Transactional
     public SplitResultResponse splitByMerchant(
             MultipartFile file, String mappingJson, boolean includeDuplicateOrderNos) {
+        return splitByMerchant(file, mappingJson, includeDuplicateOrderNos, null);
+    }
+
+    @Transactional
+    public SplitResultResponse splitByMerchant(
+            MultipartFile file,
+            String mappingJson,
+            boolean includeDuplicateOrderNos,
+            String platform) {
         if (file == null || file.isEmpty()) {
             return assignMerchantsForDate(LocalDate.now(ZoneId.of("Asia/Shanghai"))).getOrders();
         }
@@ -640,7 +700,8 @@ public class OrderProcessService {
         task.setStatus(TaskStatus.PROCESSING);
         processTaskRepository.save(task);
 
-        SplitExecution execution = executeSplit(file, mappingJson, task, includeDuplicateOrderNos);
+        SplitExecution execution =
+                executeSplit(file, mappingJson, task, includeDuplicateOrderNos, platform);
         completeTask(task, execution);
 
         return importOrderQueryService.listOrdersByDate(
@@ -882,14 +943,23 @@ public class OrderProcessService {
         return platform.trim();
     }
 
+    private Function<List<ExcelHeaderDto>, TemplateHeaderMatch> resolveMatchResolver(
+            String platform) {
+        if (platform == null || platform.isBlank()) {
+            return platformMappingTemplateService::matchByHeaders;
+        }
+        String normalized = platform.trim();
+        return headers -> platformMappingTemplateService.matchByPlatform(normalized, headers);
+    }
+
     private SplitExecution executeSplit(
             MultipartFile file,
             String mappingJson,
             ProcessTask task,
-            boolean includeDuplicateOrderNos) {
+            boolean includeDuplicateOrderNos,
+            String platform) {
         ParsedImportExcel parsed =
-                excelParserService.parseImportOnce(
-                        file, platformMappingTemplateService::matchByHeaders, false);
+                excelParserService.parseImportOnce(file, resolveMatchResolver(platform), false);
         List<OrderRow> inputRows =
                 importOrderDuplicateCheckService.filterForImport(
                         parsed.rows(), includeDuplicateOrderNos);

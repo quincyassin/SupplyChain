@@ -87,8 +87,37 @@ public class PlatformMappingTemplateService {
     return templateRepository.existsByPlatform(normalizePlatform(platform));
   }
 
+  /**
+   * 解析导入平台：唯一匹配直接给出结果，多平台同分时标记为歧义供前端手动选择
+   */
   @Transactional(readOnly = true)
-  public TemplateHeaderMatch matchByHeaders(List<ExcelHeaderDto> uploadHeaders) {
+  public PlatformHeaderMatchResult resolveImportPlatform(List<ExcelHeaderDto> uploadHeaders) {
+    List<TemplateHeaderMatch> qualified = findMatchingPlatforms(uploadHeaders);
+    if (qualified.isEmpty()) {
+      throw new BusinessException(
+          "未找到与当前 Excel 表头完全一致的平台模板（需与某平台模板表头 100% 对应）。"
+              + "若为新平台订单，请先在「系统配置 → 表头映射」中创建该平台并上传对应模板表头");
+    }
+
+    TemplateHeaderMatch best = qualified.get(0);
+    if (qualified.size() >= 2) {
+      int secondScore = qualified.get(1).matchScore();
+      if (best.matchScore() - secondScore < MIN_SCORE_GAP) {
+        List<TemplateHeaderMatch> topScoreMatches =
+            qualified.stream()
+                .filter(match -> match.matchScore() == best.matchScore())
+                .toList();
+        return PlatformHeaderMatchResult.ambiguous(topScoreMatches);
+      }
+    }
+    return PlatformHeaderMatchResult.unique(best);
+  }
+
+  /**
+   * 查找所有与上传表头 100% 匹配的平台模板（按得分降序）
+   */
+  @Transactional(readOnly = true)
+  public List<TemplateHeaderMatch> findMatchingPlatforms(List<ExcelHeaderDto> uploadHeaders) {
     List<PlatformMappingTemplate> templates = templateRepository.findAllByOrderByUpdatedAtDesc();
     if (templates.isEmpty()) {
       throw new BusinessException("尚未配置任何平台模板，请先到「系统配置 → 表头映射」中添加");
@@ -118,29 +147,49 @@ public class PlatformMappingTemplateService {
       qualified.add(new TemplateHeaderMatch(entity.getPlatform(), mapping, score));
     }
 
-    if (qualified.isEmpty()) {
-      throw new BusinessException(
-          "未找到与当前 Excel 表头完全一致的平台模板（需与某平台模板表头 100% 对应）。"
-              + "若为新平台订单，请先在「系统配置 → 表头映射」中创建该平台并上传对应模板表头");
-    }
-
     qualified.sort((left, right) -> Integer.compare(right.matchScore(), left.matchScore()));
-    TemplateHeaderMatch best = qualified.get(0);
-    if (qualified.size() >= 2) {
-      int secondScore = qualified.get(1).matchScore();
-      if (best.matchScore() - secondScore < MIN_SCORE_GAP) {
-        String candidates =
-            qualified.stream()
-                .limit(3)
-                .map(TemplateHeaderMatch::platform)
-                .collect(Collectors.joining("、"));
-        throw new BusinessException(
-            "表头同时接近多个平台模板（"
-                + candidates
-                + "），无法自动识别。请核对是否为该平台订单，或先在系统配置中创建/调整对应平台模板");
+    return qualified;
+  }
+
+  /**
+   * 自动匹配唯一平台；若多个平台同分则抛错（无用户选择时的严格模式）
+   */
+  @Transactional(readOnly = true)
+  public TemplateHeaderMatch matchByHeaders(List<ExcelHeaderDto> uploadHeaders) {
+    PlatformHeaderMatchResult result = resolveImportPlatform(uploadHeaders);
+    if (result.ambiguous()) {
+      String candidates =
+          result.candidates().stream()
+              .limit(3)
+              .map(TemplateHeaderMatch::platform)
+              .collect(Collectors.joining("、"));
+      throw new BusinessException(
+          "表头同时接近多个平台模板（"
+              + candidates
+              + "），无法自动识别。请选择订单来源平台后再导入");
+    }
+    return result.selected();
+  }
+
+  /**
+   * 按用户指定平台匹配：校验表头确实命中该平台模板
+   */
+  @Transactional(readOnly = true)
+  public TemplateHeaderMatch matchByPlatform(
+      String platform, List<ExcelHeaderDto> uploadHeaders) {
+    String normalized = normalizePlatform(platform);
+    List<TemplateHeaderMatch> matches = findMatchingPlatforms(uploadHeaders);
+    for (TemplateHeaderMatch match : matches) {
+      if (normalized.equals(match.platform())) {
+        return match;
       }
     }
-    return best;
+    if (!exists(normalized)) {
+      throw new BusinessException(
+          "平台「" + normalized + "」尚未配置表头模板，请先在系统配置中添加");
+    }
+    throw new BusinessException(
+        "当前 Excel 表头与平台「" + normalized + "」的模板不一致，无法按该平台导入");
   }
 
   @Transactional(readOnly = true)

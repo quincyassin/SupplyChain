@@ -21,12 +21,12 @@ public class MerchantConfigDto {
   private List<String> keywords;
   private LocalDateTime updatedAt;
 
-  /** 保存后自动重分单：扫描的未定义/未匹配订单数（仅 create 响应有值） */
+  /** 保存后重匹配近一周订单：扫描条数（create / update 响应有值） */
   private Integer reassignedScannedCount;
 
-  /** 保存后自动重分单：成功匹配到商家的订单数（仅 create 响应有值） */
+  /** 保存后重匹配近一周订单：成功匹配到商家的条数（create / update 响应有值） */
   private Integer reassignedMatchedCount;
 
-  /** 保存后自动重分单：仍为未定义的订单数（仅 create 响应有值） */
+  /** 保存后重匹配近一周订单：仍为未定义的条数（create / update 响应有值） */
   private Integer reassignedStillPendingCount;
 }

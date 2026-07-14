@@ -298,6 +298,25 @@ public class ImportOrderPersistenceService {
                 ordersInRange);
     }
 
+    /** 商家配置保存后重匹配的天数（含当天，共 7 天） */
+    private static final int MERCHANT_REASSIGN_LOOKBACK_DAYS = 7;
+
+    /**
+     * 对近一周（上海时区，含今天共 7 天）分单日期内的订单按当前商家关键字重新匹配（覆盖已有商家归属）
+     */
+    @Transactional
+    public ReassignPendingOrdersResult reassignOrdersForRecentWeek() {
+        LocalDate today = LocalDate.now(ZONE_SHANGHAI);
+        LocalDate rangeStartDate = today.minusDays(MERCHANT_REASSIGN_LOOKBACK_DAYS - 1L);
+        LocalDateTime rangeStart = rangeStartDate.atStartOfDay();
+        LocalDateTime rangeEndExclusive = today.plusDays(1).atStartOfDay();
+        List<ImportOrder> recentOrders =
+                importOrderRepository
+                        .findByIssueDateGreaterThanEqualAndIssueDateLessThanOrderByPlatformAscMerchantAscSystemNoAsc(
+                                rangeStart, rangeEndExclusive);
+        return reassignOrdersByKeywords(recentOrders);
+    }
+
     /**
      * 对全库尚未归属具体商家的订单，按当前商家关键字配置重新分单（不导出 Excel）
      */
@@ -307,17 +326,21 @@ public class ImportOrderPersistenceService {
                 importOrderRepository.findOrdersWithoutAssignedMerchant(
                         MerchantConfigService.PENDING_SPLIT_MERCHANT,
                         MerchantConfigService.UNMATCHED_MERCHANT_NAME);
-        return reassignPendingOrders(pendingOrders);
+        return reassignOrdersByKeywords(pendingOrders);
     }
 
     private ReassignPendingOrdersResult reassignPendingOrders(List<ImportOrder> pendingOrders) {
-        if (pendingOrders == null || pendingOrders.isEmpty()) {
+        return reassignOrdersByKeywords(pendingOrders);
+    }
+
+    private ReassignPendingOrdersResult reassignOrdersByKeywords(List<ImportOrder> orders) {
+        if (orders == null || orders.isEmpty()) {
             return new ReassignPendingOrdersResult(0, 0, 0);
         }
 
         List<OrderRow> rowsForSplit = new ArrayList<>();
         int stillPendingCount = 0;
-        for (ImportOrder order : pendingOrders) {
+        for (ImportOrder order : orders) {
             OrderRow row = toOrderRow(order);
             String merchant = merchantConfigService.resolveByProductName(row.getProductName());
             if (MerchantConfigService.UNMATCHED_MERCHANT_NAME.equals(merchant)) {
@@ -341,7 +364,7 @@ public class ImportOrderPersistenceService {
             }
         }
 
-        for (ImportOrder entity : pendingOrders) {
+        for (ImportOrder entity : orders) {
             OrderRow assigned = splitBySystemNo.get(entity.getSystemNo());
             if (assigned == null) {
                 continue;
@@ -353,9 +376,8 @@ public class ImportOrderPersistenceService {
             entity.setMerchant(assignedMerchant);
             entity.setMerchantSplit(true);
         }
-        importOrderRepository.saveAll(pendingOrders);
-        return new ReassignPendingOrdersResult(
-                pendingOrders.size(), matchedCount, stillPendingCount);
+        importOrderRepository.saveAll(orders);
+        return new ReassignPendingOrdersResult(orders.size(), matchedCount, stillPendingCount);
     }
 
     private boolean hasAssignedMerchant(ImportOrder order) {
