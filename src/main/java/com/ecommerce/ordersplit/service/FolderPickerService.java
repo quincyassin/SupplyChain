@@ -30,7 +30,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class FolderPickerService {
 
-    private static final String APP_NAME = "电商助手";
+    private static final String APP_NAME = "分单宝";
 
     /** PowerShell 文件夹对话框用户取消时的退出码 */
     static final int WINDOWS_PICK_CANCEL_EXIT_CODE = 2;

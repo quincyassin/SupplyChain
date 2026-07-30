@@ -40,7 +40,7 @@ function Invoke-Checked([string]$Label, [scriptblock]$Block) {
 Set-Location $RootDir
 
 Write-Host "=========================================="
-Write-Host "  电商助手 - Windows 安装包构建"
+Write-Host "  分单宝 - Windows 安装包构建"
 Write-Host "  版本: $AppVersion"
 Write-Host "=========================================="
 

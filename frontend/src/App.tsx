@@ -133,7 +133,7 @@ export default function App() {
           }}
         />
         <Title level={5} className="app-header-title">
-          电商助手
+          分单宝
         </Title>
       </Header>
       {needActivate ? (

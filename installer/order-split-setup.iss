@@ -3,7 +3,7 @@
 
 #define AppVersion "1.0.0"
 #define AppVersionInfo "1.0.0.0"
-#define MyAppName "电商助手"
+#define MyAppName "分单宝"
 
 [Setup]
 AppId={{A7B3C9D1-E2F4-4A6B-8C0D-1E2F3A4B5C6D}

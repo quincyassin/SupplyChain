@@ -33,7 +33,7 @@ mkdir -p "$DATA_DIR" "$LOG_DIR"
 
 bash "$ROOT_DIR/stop-service.sh" >/dev/null 2>&1 || true
 
-echo "正在启动电商助手，请稍候..."
+echo "正在启动分单宝，请稍候..."
 nohup "$JAVA_EXE" -Djava.awt.headless=false -Dspring.profiles.active=standalone -jar "$JAR_FILE" >>"$LOG_DIR/app.log" 2>&1 &
 echo $! >"$PID_FILE"
 disown
